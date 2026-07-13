@@ -449,10 +449,6 @@ const state = {
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 
-// ── Init ──
-loadHistory();
-renderPreviews();
-
 // ── DOM refs ──
 const dropArea = $('#dropArea');
 const fileInput = $('#fileInput');
@@ -476,6 +472,10 @@ const toleranceGroup = $('#toleranceGroup');
 const langGroup = $('#langGroup');
 const progressFill = $('#progressFill');
 const progressBar = $('#progressBar');
+
+// ── Init ──
+loadHistory();
+renderPreviews();
 
 // ── File Handling ──
 dropArea.addEventListener('click', () => fileInput.click());
