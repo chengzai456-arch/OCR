@@ -1,10 +1,9 @@
 {
   "name": "ocr-workbench",
-  "version": "4.0.0",
-  "description": "Dual-engine OCR Workbench — Tesseract.js (browser) + Tencent Cloud OCR (serverless proxy)",
+  "version": "5.0.0",
+  "description": "Pure browser-side OCR Workbench powered by Tesseract.js — zero server, zero API keys",
   "private": true,
   "scripts": {
-    "dev": "npx serve .",
-    "deploy": "vercel deploy --prod"
+    "dev": "npx serve ."
   }
 }

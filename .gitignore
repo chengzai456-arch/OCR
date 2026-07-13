@@ -1,5 +1,4 @@
 node_modules/
-.vercel/
-saved_images/
+.DS_Store
 *.log
-.env
+saved_images/
