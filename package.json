@@ -1,11 +1,10 @@
 {
   "name": "ocr-workbench",
-  "version": "1.0.0",
-  "description": "AI-powered OCR recognition workbench — upload images, get structured tables, export Excel",
+  "version": "3.0.0",
+  "description": "Browser-based OCR Workbench — Tesseract.js + PDF.js, no API keys, no backend",
   "private": true,
   "scripts": {
-    "dev": "vercel dev",
+    "dev": "npx serve .",
     "deploy": "vercel deploy --prod"
-  },
-  "dependencies": {}
+  }
 }

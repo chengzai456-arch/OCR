@@ -3,13 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OCR Workbench</title>
+<title>OCR Workbench — Browser OCR</title>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
 :root {
   --bg: #0d1117;
   --surface: #161b22;
+  --surface2: #1c2128;
   --border: #30363d;
   --text: #e6edf3;
   --text-dim: #8b949e;
@@ -24,11 +27,8 @@
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font);
-  min-height: 100vh;
-  overflow-x: hidden;
+  background: var(--bg); color: var(--text); font-family: var(--font);
+  min-height: 100vh; overflow-x: hidden;
 }
 .app { display: flex; height: 100vh; }
 
@@ -65,6 +65,7 @@ body {
 }
 .topbar-badge.green { color: var(--green); border-color: #1a3d26; background: #0d1f14; }
 .topbar-badge.red { color: var(--red); border-color: #3d1a1a; background: #1f0d0d; }
+.topbar-badge.orange { color: var(--orange); border-color: #3d3a1a; background: #1f1d0d; }
 
 /* Content */
 .content { flex: 1; display: flex; overflow: hidden; }
@@ -84,6 +85,18 @@ body {
   font-family: var(--mono); background: var(--surface); border: 1px solid var(--border);
   border-radius: 3px; padding: 1px 5px; font-size: 11px;
 }
+
+/* Controls */
+.controls-row {
+  display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; align-items: center;
+}
+.control-group { display: flex; align-items: center; gap: 6px; }
+.control-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; }
+.control-select {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text); font-size: 12px; padding: 4px 8px; font-family: var(--font); cursor: pointer;
+}
+.control-select:focus { border-color: var(--accent); outline: none; }
 
 /* Preview */
 .preview-area { display: none; margin-top: 20px; }
@@ -110,8 +123,7 @@ body {
 }
 .preview-card-status {
   position: absolute; top: 6px; right: 6px;
-  font-size: 10px; padding: 2px 6px; border-radius: 3px;
-  font-family: var(--mono);
+  font-size: 10px; padding: 2px 6px; border-radius: 3px; font-family: var(--mono);
 }
 .preview-card-status.processing { background: rgba(210,153,34,0.2); color: var(--orange); }
 .preview-card-status.done { background: rgba(63,185,80,0.2); color: var(--green); }
@@ -144,6 +156,9 @@ body {
 .progress-bar-fill {
   height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s ease;
 }
+.progress-text {
+  font-size: 11px; font-family: var(--mono); color: var(--text-dim); min-width: 80px; text-align: right;
+}
 
 /* Result Panel */
 .result-panel {
@@ -170,12 +185,8 @@ td { font-family: var(--mono); font-size: 11px; }
 td[contenteditable="true"] { cursor: text; outline: 1px dashed transparent; transition: outline-color 0.15s; }
 td[contenteditable="true"]:focus { outline-color: var(--accent); background: rgba(88,166,255,0.06); }
 tr:hover td { background: rgba(88,166,255,0.03); }
-.conf-low { color: var(--red); }
-.conf-mid { color: var(--orange); }
-.conf-high { color: var(--green); }
 
 /* History */
-.history-list.visible { display: block; }
 .history-item {
   padding: 12px; border: 1px solid var(--border); border-radius: var(--radius);
   margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;
@@ -219,6 +230,30 @@ tr:hover td { background: rgba(88,166,255,0.03); }
 .toast.success { border-color: var(--green); color: var(--green); }
 .toast.error { border-color: var(--red); color: var(--red); }
 @keyframes toastIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Loading overlay */
+.loading-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 150;
+  display: flex; align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.loading-overlay.open { opacity: 1; pointer-events: auto; }
+.loading-box {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 32px 40px; text-align: center; min-width: 300px;
+}
+.loading-spinner {
+  width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent);
+  border-radius: 50%; margin: 0 auto 16px; animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { font-size: 13px; color: var(--text); margin-bottom: 8px; }
+.loading-progress { font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+.loading-bar {
+  width: 100%; height: 4px; background: var(--border); border-radius: 2px;
+  overflow: hidden; margin-top: 12px;
+}
+.loading-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s; }
 </style>
 </head>
 <body>
@@ -242,10 +277,44 @@ tr:hover td { background: rgba(88,166,255,0.03); }
       <div class="upload-zone" id="uploadZone">
         <div class="drop-area" id="dropArea">
           <div class="drop-area-icon">IMG</div>
-          <div class="drop-area-title">拖拽图片到此处，或点击选择</div>
+          <div class="drop-area-title">拖拽图片/PDF到此处，或点击选择</div>
           <div class="drop-area-sub">支持 PNG / JPG / BMP / PDF  |  按 <kbd>Ctrl+V</kbd> 粘贴截图</div>
         </div>
         <input type="file" id="fileInput" accept="image/png,image/jpeg,image/bmp,image/jpg,application/pdf" multiple hidden>
+
+        <div class="controls-row">
+          <div class="control-group">
+            <span class="control-label">语言</span>
+            <select class="control-select" id="langSelect">
+              <option value="eng">English</option>
+              <option value="chi_sim">中文简体</option>
+              <option value="chi_sim+eng" selected>中文+英文</option>
+              <option value="chi_tra">中文繁體</option>
+              <option value="ita">Italiano</option>
+              <option value="nld">Nederlands</option>
+              <option value="ita+eng">Italian+English</option>
+              <option value="nld+eng">Dutch+English</option>
+              <option value="chi_sim+eng+ita">中+英+意</option>
+              <option value="chi_sim+eng+nld">中+英+荷</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <span class="control-label">模式</span>
+            <select class="control-select" id="modeSelect">
+              <option value="table" selected>表格提取</option>
+              <option value="text">纯文本</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <span class="control-label">表格行容差</span>
+            <select class="control-select" id="rowTolerance">
+              <option value="8">8px (严格)</option>
+              <option value="12" selected>12px (标准)</option>
+              <option value="20">20px (宽松)</option>
+              <option value="30">30px (极宽)</option>
+            </select>
+          </div>
+        </div>
 
         <div class="preview-area" id="previewArea">
           <div class="preview-header">
@@ -259,13 +328,14 @@ tr:hover td { background: rgba(88,166,255,0.03); }
           <button class="btn" id="clearBtn">清空</button>
           <button class="btn primary" id="recognizeBtn">开始识别</button>
           <div class="progress-bar-wrap" id="progressBar"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div>
+          <span class="progress-text" id="progressText"></span>
           <button class="btn" id="exportBtn" disabled>导出 Excel</button>
           <button class="btn" id="copyBtn" disabled>复制到剪贴板</button>
         </div>
 
         <details style="margin-top:20px">
           <summary style="font-size:12px;color:var(--text-dim);cursor:pointer;padding:8px 0">手动导入 JSON（备用）</summary>
-          <textarea id="jsonInput" placeholder="粘贴结构化 JSON 数据..." style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;resize:vertical;margin-top:8px"></textarea>
+          <textarea id="jsonInput" placeholder='粘贴 JSON: {"headers":["列1"],"rows":[["值1"]]}' style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;resize:vertical;margin-top:8px"></textarea>
           <button class="btn primary" id="importJsonBtn" style="margin-top:8px">导入</button>
         </details>
       </div>
@@ -274,6 +344,7 @@ tr:hover td { background: rgba(88,166,255,0.03); }
         <div class="tabs" id="resultTabs">
           <div class="tab active" data-tab="table">表格视图</div>
           <div class="tab" data-tab="raw">原始数据</div>
+          <div class="tab" data-tab="image">原图对照</div>
         </div>
         <div class="result-content" id="resultContent">
           <div class="empty-state">
@@ -286,25 +357,38 @@ tr:hover td { background: rgba(88,166,255,0.03); }
   </div>
 </div>
 
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-box">
+    <div class="loading-spinner"></div>
+    <div class="loading-text" id="loadingText">正在初始化 OCR 引擎...</div>
+    <div class="loading-progress" id="loadingProgress"></div>
+    <div class="loading-bar"><div class="loading-bar-fill" id="loadingBarFill" style="width:0%"></div></div>
+  </div>
+</div>
+
 <div class="toast-container" id="toastContainer"></div>
 <div class="modal-overlay" id="modalOverlay"><div class="modal" id="modalContent"></div></div>
 
 <script>
+// ── PDF.js worker ──
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
 // ── State ──
 const state = {
   files: [],
   currentData: null,
+  currentImageUrl: null,
   history: [],
   view: 'work',
   processing: false,
+  activeTab: 'table',
 };
-
-// ── Init ──
-gsap.registerPlugin(ScrollTrigger);
-loadHistory();
 
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
+
+// ── Init ──
+loadHistory();
 
 // ── DOM refs ──
 const dropArea = $('#dropArea');
@@ -318,12 +402,10 @@ const resultContent = $('#resultContent');
 const resultTabs = $('#resultTabs');
 const statusBadge = $('#statusBadge');
 const fileCountBadge = $('#fileCount');
-const jsonInput = $('#jsonInput');
-const progressBar = $('#progressBar');
-const progressFill = $('#progressFill');
-
-// ── OCR API URL ── (Vercel 部署后设置实际地址)
-const API_BASE = window.OCR_API_URL || '/api/ocr';
+const loadingOverlay = $('#loadingOverlay');
+const loadingText = $('#loadingText');
+const loadingProgress = $('#loadingProgress');
+const loadingBarFill = $('#loadingBarFill');
 
 // ── File Handling ──
 dropArea.addEventListener('click', () => fileInput.click());
@@ -347,17 +429,32 @@ document.addEventListener('paste', e => {
   }
 });
 
-function addFiles(newFiles) {
-  newFiles.forEach(f => {
-    if (!f) return;
+async function addFiles(newFiles) {
+  for (const f of newFiles) {
+    if (!f) continue;
     const id = Date.now() + '_' + Math.random().toString(36).slice(2);
-    const reader = new FileReader();
-    reader.onload = () => {
-      state.files.push({ id, name: f.name, size: f.size, dataUrl: reader.result, blob: f, status: null, result: null });
-      renderPreviews();
-    };
-    reader.readAsDataURL(f);
-  });
+    if (f.type === 'application/pdf') {
+      // PDF: render first page as thumbnail
+      try {
+        const arrayBuffer = await f.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const page = await pdf.getPage(1);
+        const viewport = page.getViewport({ scale: 0.3 });
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        state.files.push({ id, name: f.name, size: f.size, dataUrl: canvas.toDataURL(), blob: f, status: null, result: null, isPdf: true, pdfBuffer: arrayBuffer, pdfPages: pdf.numPages });
+      } catch (err) {
+        state.files.push({ id, name: f.name, size: f.size, dataUrl: '', blob: f, status: null, result: null, isPdf: true, error: err.message });
+      }
+    } else {
+      const reader = new FileReader();
+      const dataUrl = await new Promise((res) => { reader.onload = () => res(reader.result); reader.readAsDataURL(f); });
+      state.files.push({ id, name: f.name, size: f.size, dataUrl, blob: f, status: null, result: null });
+    }
+    renderPreviews();
+  }
 }
 
 function renderPreviews() {
@@ -374,12 +471,13 @@ function renderPreviews() {
 
   previewGrid.innerHTML = state.files.map((f, i) => `
     <div class="preview-card ${f.status || ''}" data-id="${f.id}" data-index="${i}">
-      <img src="${f.dataUrl}" alt="${f.name}" loading="lazy">
+      ${f.dataUrl ? `<img src="${f.dataUrl}" alt="${f.name}" loading="lazy">` : '<div style="height:140px;display:flex;align-items:center;justify-content:center;color:var(--text-dim);font-size:11px">PDF</div>'}
+      ${f.isPdf ? `<div class="preview-card-status" style="background:rgba(88,166,255,0.2);color:var(--accent)">PDF</div>` : ''}
       ${f.status ? `<div class="preview-card-status ${f.status}">${statusLabel(f.status)}</div>` : ''}
       <div class="preview-card-info">
         <div>
           <div class="preview-card-name" title="${f.name}">${f.name}</div>
-          <div class="preview-card-size">${formatSize(f.size)}</div>
+          <div class="preview-card-size">${formatSize(f.size)}${f.isPdf ? ' · ' + (f.pdfPages || '?') + 'p' : ''}</div>
         </div>
         ${!state.processing ? `<button class="preview-card-remove" title="移除">x</button>` : ''}
       </div>
@@ -415,7 +513,34 @@ function formatSize(bytes) {
   return (bytes / 1048576).toFixed(1) + ' MB';
 }
 
-// ── OCR 识别 ──
+// ── OCR Engine ──
+let tesseractWorker = null;
+
+async function getWorker(lang) {
+  if (tesseractWorker) {
+    try { await tesseractWorker.terminate(); } catch {}
+  }
+  loadingText.textContent = '加载语言包: ' + lang;
+  loadingOverlay.classList.add('open');
+  
+  tesseractWorker = await Tesseract.createWorker(lang, 1, {
+    logger: m => {
+      if (m.status === 'recognizing text') {
+        const pct = Math.round(m.progress * 100);
+        loadingProgress.textContent = m.status + ' ' + pct + '%';
+        loadingBarFill.style.width = pct + '%';
+      } else {
+        loadingProgress.textContent = m.status || '';
+        loadingBarFill.style.width = Math.round((m.progress || 0) * 100) + '%';
+      }
+    }
+  });
+  
+  loadingOverlay.classList.remove('open');
+  return tesseractWorker;
+}
+
+// ── Recognition ──
 $('#recognizeBtn').addEventListener('click', runRecognition);
 $('#clearBtn').addEventListener('click', () => {
   state.files = [];
@@ -427,95 +552,278 @@ $('#clearBtn').addEventListener('click', () => {
 
 async function runRecognition() {
   if (state.processing) return;
-  if (!state.files.length) { showToast('请先上传图片', 'error'); return; }
+  if (!state.files.length) { showToast('请先上传文件', 'error'); return; }
 
   const selected = state.files.filter(f => {
     const card = previewGrid.querySelector(`[data-id="${f.id}"]`);
     return card?.classList.contains('selected');
   });
   const filesToProcess = selected.length ? selected : state.files;
+  const lang = $('#langSelect').value;
+  const mode = $('#modeSelect').value;
+  const tolerance = parseInt($('#rowTolerance').value);
 
   state.processing = true;
   $('#recognizeBtn').disabled = true;
   statusBadge.textContent = 'PROCESSING';
-  statusBadge.className = 'topbar-badge';
-  progressBar.classList.add('visible');
-  progressFill.style.width = '0%';
+  statusBadge.className = 'topbar-badge orange';
+  $('#progressBar').classList.add('visible');
+  $('#progressFill').style.width = '0%';
+  $('#progressText').textContent = '';
 
-  // Reset all file statuses
+  // Init worker
+  loadingText.textContent = '初始化 OCR 引擎...';
+  loadingProgress.textContent = '';
+  loadingBarFill.style.width = '0%';
+  loadingOverlay.classList.add('open');
+  
+  try {
+    await getWorker(lang);
+  } catch (err) {
+    loadingOverlay.classList.remove('open');
+    showToast('OCR 引擎初始化失败: ' + err.message, 'error');
+    state.processing = false;
+    $('#recognizeBtn').disabled = false;
+    statusBadge.textContent = 'READY';
+    statusBadge.className = 'topbar-badge green';
+    $('#progressBar').classList.remove('visible');
+    return;
+  }
+  loadingOverlay.classList.remove('open');
+
+  // Reset statuses
   state.files.forEach(f => { f.status = null; f.result = null; });
   renderPreviews();
 
   let completed = 0;
   const total = filesToProcess.length;
-  let allResults = []; // collect all results for merging
+  let allResults = [];
 
-  // Process sequentially to respect API rate limit (2 req/s)
   for (const file of filesToProcess) {
     file.status = 'processing';
     renderPreviews();
+    
     try {
-      const result = await callOCR(file.dataUrl);
+      const images = await fileToImages(file);
+      let fileResult = { headers: [], rows: [], meta: { source: file.name, pages: images.length } };
+      
+      for (let pi = 0; pi < images.length; pi++) {
+        $('#progressText').textContent = `${file.name} - 第${pi+1}/${images.length}页`;
+        
+        const { data } = await tesseractWorker.recognize(images[pi]);
+        
+        if (mode === 'text') {
+          // Pure text mode
+          if (!fileResult.headers.length) fileResult.headers = ['文本内容'];
+          fileResult.rows.push([data.text.trim()]);
+        } else {
+          // Table extraction mode
+          const table = reconstructTable(data.words, tolerance);
+          if (pi === 0) {
+            fileResult.headers = table.headers;
+            fileResult.rows = table.rows;
+          } else {
+            // Merge subsequent pages
+            fileResult.rows.push(...table.rows);
+            // Extend headers if more columns
+            if (table.headers.length > fileResult.headers.length) {
+              for (let i = fileResult.headers.length; i < table.headers.length; i++) {
+                fileResult.headers.push('列' + (i + 1));
+              }
+            }
+          }
+        }
+        
+        const pct = ((completed + (pi + 1) / images.length) / total * 100);
+        $('#progressFill').style.width = pct + '%';
+      }
+      
       file.status = 'done';
-      file.result = result;
-      allResults.push({ name: file.name, ...result });
+      file.result = fileResult;
+      allResults.push(fileResult);
     } catch (err) {
       file.status = 'error';
       file.result = { error: err.message };
       showToast(`${file.name}: ${err.message}`, 'error');
     }
     completed++;
-    progressFill.style.width = (completed / total * 100) + '%';
+    $('#progressFill').style.width = (completed / total * 100) + '%';
+    $('#progressText').textContent = `${completed}/${total} 完成`;
     renderPreviews();
   }
 
-  // Merge results: combine all tables into one view
+  // Cleanup worker
+  try { if (tesseractWorker) await tesseractWorker.terminate(); } catch {}
+  tesseractWorker = null;
+
+  // Show results
   if (allResults.length > 0) {
     const merged = mergeResults(allResults);
-    setResultData(merged);
+    setResultData(merged, filesToProcess[0]?.dataUrl);
   }
 
   state.processing = false;
   $('#recognizeBtn').disabled = false;
   statusBadge.textContent = 'READY';
   statusBadge.className = 'topbar-badge green';
-  progressBar.classList.remove('visible');
+  $('#progressBar').classList.remove('visible');
+  $('#progressText').textContent = '';
 
   const doneCount = filesToProcess.filter(f => f.status === 'done').length;
   showToast(`识别完成: ${doneCount}/${total} 成功`, doneCount === total ? 'success' : 'error');
 }
 
-async function callOCR(dataUrl) {
-  const resp = await fetch(API_BASE, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ imageBase64: dataUrl }),
+async function fileToImages(file) {
+  if (file.isPdf) {
+    const pdf = await pdfjsLib.getDocument({ data: file.pdfBuffer }).promise;
+    const images = [];
+    const maxPages = Math.min(pdf.numPages, 10); // cap at 10 pages
+    for (let i = 1; i <= maxPages; i++) {
+      const page = await pdf.getPage(i);
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+      images.push(canvas.toDataURL('image/png'));
+    }
+    return images;
+  }
+  return [file.dataUrl];
+}
+
+// ── Table Reconstruction ──
+function reconstructTable(words, tolerance = 12) {
+  if (!words || !words.length) return { headers: [], rows: [] };
+  
+  // Filter out low-confidence noise
+  words = words.filter(w => w.text && w.text.trim() && w.confidence > 30);
+  if (!words.length) return { headers: [], rows: [] };
+  
+  // Sort by Y position
+  words.sort((a, b) => a.bbox.y0 - b.bbox.y0);
+  
+  // Group into rows based on Y overlap
+  const rows = [];
+  let currentRow = [words[0]];
+  let currentY = (words[0].bbox.y0 + words[0].bbox.y1) / 2;
+  
+  for (let i = 1; i < words.length; i++) {
+    const w = words[i];
+    const wY = (w.bbox.y0 + w.bbox.y1) / 2;
+    if (Math.abs(wY - currentY) <= tolerance) {
+      currentRow.push(w);
+      // Update row Y average
+      currentY = currentRow.reduce((s, w) => s + (w.bbox.y0 + w.bbox.y1) / 2, 0) / currentRow.length;
+    } else {
+      rows.push(currentRow);
+      currentRow = [w];
+      currentY = wY;
+    }
+  }
+  if (currentRow.length) rows.push(currentRow);
+  
+  // Sort each row by X position
+  rows.forEach(r => r.sort((a, b) => a.bbox.x0 - b.bbox.x0));
+  
+  // Detect column boundaries by clustering X positions
+  // Collect all word X-centers
+  const allXCenters = words.map(w => (w.bbox.x0 + w.bbox.x1) / 2);
+  allXCenters.sort((a, b) => a - b);
+  
+  // Cluster X positions to find column centers
+  const colThreshold = 25; // pixels
+  const colClusters = [];
+  let currentCluster = [allXCenters[0]];
+  
+  for (let i = 1; i < allXCenters.length; i++) {
+    if (allXCenters[i] - currentCluster[currentCluster.length - 1] <= colThreshold) {
+      currentCluster.push(allXCenters[i]);
+    } else {
+      colClusters.push(currentCluster);
+      currentCluster = [allXCenters[i]];
+    }
+  }
+  if (currentCluster.length) colClusters.push(currentCluster);
+  
+  const colCenters = colClusters.map(c => c.reduce((s, x) => s + x, 0) / c.length);
+  const numCols = colCenters.length;
+  
+  // Build table grid
+  const tableRows = rows.map(rowWords => {
+    const cells = new Array(numCols).fill('');
+    for (const w of rowWords) {
+      const wX = (w.bbox.x0 + w.bbox.x1) / 2;
+      // Find nearest column
+      let minDist = Infinity, nearestCol = 0;
+      for (let c = 0; c < colCenters.length; c++) {
+        const dist = Math.abs(wX - colCenters[c]);
+        if (dist < minDist) { minDist = dist; nearestCol = c; }
+      }
+      cells[nearestCol] = (cells[nearestCol] ? cells[nearestCol] + ' ' : '') + w.text.trim();
+    }
+    return cells;
   });
-  const data = await resp.json();
-  if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
-  return data;
+  
+  // First row = headers (if it looks like a header)
+  // Heuristic: if first row has all cells filled and is shorter
+  let headers = [];
+  let dataRows = tableRows;
+  
+  if (tableRows.length > 1) {
+    const firstRow = tableRows[0];
+    const filledCount = firstRow.filter(c => c.trim()).length;
+    if (filledCount >= Math.ceil(numCols * 0.6)) {
+      headers = firstRow.map((c, i) => c.trim() || '列' + (i + 1));
+      dataRows = tableRows.slice(1);
+    }
+  }
+  
+  if (!headers.length) {
+    headers = Array.from({ length: numCols }, (_, i) => '列' + (i + 1));
+  }
+  
+  return { headers, rows: dataRows };
 }
 
 function mergeResults(results) {
   if (results.length === 1) return results[0];
-  // Merge all table rows
-  const allHeaders = results[0].headers || [];
-  const allRows = results.flatMap(r => r.rows || []);
+  // Use the first result's headers, extend if needed
+  let headers = [...(results[0].headers || [])];
+  const allRows = [];
+  
+  for (const r of results) {
+    if (!r.rows) continue;
+    // Extend headers if this result has more columns
+    if (r.headers && r.headers.length > headers.length) {
+      for (let i = headers.length; i < r.headers.length; i++) {
+        headers.push(r.headers[i] || '列' + (i + 1));
+      }
+    }
+    // Pad rows to match header length
+    for (const row of r.rows) {
+      const padded = [...row];
+      while (padded.length < headers.length) padded.push('');
+      allRows.push(padded);
+    }
+  }
+  
   return {
-    headers: allHeaders,
+    headers,
     rows: allRows,
     meta: {
-      source: results.map(r => r.meta?.source || r.name).join(', '),
-      tables: results.reduce((s, r) => s + (r.meta?.tables || 0), 0),
-      merged: true,
+      source: results.map(r => r.meta?.source || '').filter(Boolean).join(', '),
       files: results.length,
+      merged: true,
+      totalRows: allRows.length,
     },
   };
 }
 
 // ── Result Display ──
-function setResultData(data) {
+function setResultData(data, imageUrl) {
   state.currentData = data;
+  state.currentImageUrl = imageUrl;
   resultPanel.classList.add('open');
   $('#exportBtn').disabled = false;
   $('#copyBtn').disabled = false;
@@ -525,7 +833,7 @@ function setResultData(data) {
 
 function renderTable() {
   const { headers, rows, meta } = state.currentData;
-  if (!headers.length && !rows.length) {
+  if (!headers?.length && !rows?.length) {
     resultContent.innerHTML = `<div class="empty-state"><div class="empty-state-icon">TBL</div><div class="empty-state-text">未识别到表格数据</div></div>`;
     return;
   }
@@ -534,10 +842,7 @@ function renderTable() {
       <table>
         <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
         <tbody>${rows.map((row, ri) => `
-          <tr>${row.map((cell, ci) => {
-            const hasLowConf = typeof cell === 'string' && cell.includes('[低置信度:');
-            return `<td contenteditable="true" data-row="${ri}" data-col="${ci}"${hasLowConf ? ' class="conf-low"' : ''}>${cell ?? ''}</td>`;
-          }).join('')}</tr>
+          <tr>${row.map((cell, ci) => `<td contenteditable="true" data-row="${ri}" data-col="${ci}">${cell ?? ''}</td>`).join('')}</tr>
         `).join('')}</tbody>
       </table>
     </div>
@@ -553,7 +858,15 @@ function renderTable() {
 }
 
 function renderRaw() {
-  resultContent.innerHTML = `<pre style="font-family:var(--mono);font-size:11px;line-height:1.6;overflow:auto;max-height:100%">${JSON.stringify(state.currentData, null, 2)}</pre>`;
+  resultContent.innerHTML = `<pre style="font-family:var(--mono);font-size:11px;line-height:1.6;overflow:auto;max-height:100%;white-space:pre-wrap">${JSON.stringify(state.currentData, null, 2)}</pre>`;
+}
+
+function renderImage() {
+  if (state.currentImageUrl) {
+    resultContent.innerHTML = `<img src="${state.currentImageUrl}" style="max-width:100%;border-radius:var(--radius);border:1px solid var(--border)">`;
+  } else {
+    resultContent.innerHTML = `<div class="empty-state"><div class="empty-state-icon">IMG</div><div class="empty-state-text">无原图</div></div>`;
+  }
 }
 
 function closeResult() {
@@ -567,8 +880,10 @@ resultTabs.addEventListener('click', e => {
   if (!e.target.classList.contains('tab')) return;
   resultTabs.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   e.target.classList.add('active');
-  if (e.target.dataset.tab === 'table') renderTable();
-  if (e.target.dataset.tab === 'raw') renderRaw();
+  state.activeTab = e.target.dataset.tab;
+  if (state.activeTab === 'table') renderTable();
+  if (state.activeTab === 'raw') renderRaw();
+  if (state.activeTab === 'image') renderImage();
 });
 
 // ── Export ──
@@ -589,12 +904,12 @@ $('#copyBtn').addEventListener('click', () => {
   navigator.clipboard.writeText(text).then(() => showToast('已复制到剪贴板', 'success'));
 });
 
-// ── JSON Import (Fallback) ──
+// ── JSON Import ──
 $('#importJsonBtn').addEventListener('click', () => {
   try {
-    const data = JSON.parse(jsonInput.value.trim());
+    const data = JSON.parse($('#jsonInput').value.trim());
     if (!data.headers || !data.rows) { showToast('需要 headers 和 rows 字段', 'error'); return; }
-    setResultData(data);
+    setResultData(data, null);
     showToast('数据已导入', 'success');
   } catch (e) { showToast('JSON 解析失败: ' + e.message, 'error'); }
 });
@@ -611,11 +926,11 @@ function saveHistory(data) {
   };
   state.history.unshift(entry);
   if (state.history.length > 50) state.history.pop();
-  localStorage.setItem('ocr_history', JSON.stringify(state.history));
+  localStorage.setItem('ocr_history_v3', JSON.stringify(state.history));
 }
 
 function loadHistory() {
-  try { state.history = JSON.parse(localStorage.getItem('ocr_history') || '[]'); }
+  try { state.history = JSON.parse(localStorage.getItem('ocr_history_v3') || '[]'); }
   catch { state.history = []; }
 }
 
@@ -625,7 +940,7 @@ function renderHistory() {
     zone.innerHTML = `<div class="empty-state"><div class="empty-state-icon">HST</div><div class="empty-state-text">暂无历史记录</div></div>`;
     return;
   }
-  zone.innerHTML = `<div class="history-list visible">${state.history.map(h => `
+  zone.innerHTML = `<div>${state.history.map(h => `
     <div class="history-item" data-id="${h.id}">
       <div class="history-item-header">
         <div class="history-item-name">${h.name}</div>
@@ -640,7 +955,7 @@ function renderHistory() {
       const id = parseInt(item.dataset.id);
       const entry = state.history.find(h => h.id === id);
       if (entry) {
-        setResultData(entry.data);
+        setResultData(entry.data, null);
         switchView('work');
       }
     });
@@ -648,71 +963,20 @@ function renderHistory() {
 }
 
 function renderWork() {
+  // Already rendered, just ensure visibility
   const zone = $('#uploadZone');
-  zone.innerHTML = `
-    <div class="drop-area" id="dropArea">
-      <div class="drop-area-icon">IMG</div>
-      <div class="drop-area-title">拖拽图片到此处，或点击选择</div>
-      <div class="drop-area-sub">支持 PNG / JPG / BMP / PDF  |  按 <kbd>Ctrl+V</kbd> 粘贴截图</div>
-    </div>
-    <input type="file" id="fileInput" accept="image/png,image/jpeg,image/bmp,image/jpg,application/pdf" multiple hidden>
-    <div class="preview-area" id="previewArea"><div class="preview-header"><div class="preview-label">已上传文件</div><div class="preview-count" id="previewCount">0</div></div><div class="preview-grid" id="previewGrid"></div></div>
-    <div class="action-bar" id="actionBar" style="display:none">
-      <button class="btn" id="clearBtn">清空</button>
-      <button class="btn primary" id="recognizeBtn">开始识别</button>
-      <div class="progress-bar-wrap" id="progressBar"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div>
-      <button class="btn" id="exportBtn" disabled>导出 Excel</button>
-      <button class="btn" id="copyBtn" disabled>复制到剪贴板</button>
-    </div>
-    <details style="margin-top:20px">
-      <summary style="font-size:12px;color:var(--text-dim);cursor:pointer;padding:8px 0">手动导入 JSON（备用）</summary>
-      <textarea id="jsonInput" placeholder="粘贴结构化 JSON 数据..." style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;resize:vertical;margin-top:8px"></textarea>
-      <button class="btn primary" id="importJsonBtn" style="margin-top:8px">导入</button>
-    </details>
-  `;
-  rebindWorkEvents();
-  renderPreviews();
-}
-
-function rebindWorkEvents() {
-  const d = $('#dropArea');
-  const fi = $('#fileInput');
-  d?.addEventListener('click', () => fi?.click());
-  fi?.addEventListener('change', e => addFiles([...e.target.files]));
-  d?.addEventListener('dragover', e => { e.preventDefault(); d.classList.add('drag-over'); });
-  d?.addEventListener('dragleave', () => d.classList.remove('drag-over'));
-  d?.addEventListener('drop', e => { e.preventDefault(); d.classList.remove('drag-over'); addFiles([...e.dataTransfer.files]); });
-  $('#clearBtn')?.addEventListener('click', () => { state.files = []; state.currentData = null; renderPreviews(); closeResult(); });
-  $('#recognizeBtn')?.addEventListener('click', runRecognition);
-  $('#exportBtn')?.addEventListener('click', () => state.currentData && (() => {
-    const { headers, rows } = state.currentData;
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
-    XLSX.writeFile(wb, 'ocr_result_' + new Date().toISOString().slice(0,10) + '.xlsx');
-    showToast('Excel 导出成功', 'success');
-  })());
-  $('#copyBtn')?.addEventListener('click', () => {
-    if (!state.currentData) return;
-    const text = [state.currentData.headers, ...state.currentData.rows].map(r => r.join('\t')).join('\n');
-    navigator.clipboard.writeText(text).then(() => showToast('已复制', 'success'));
-  });
-  $('#importJsonBtn')?.addEventListener('click', () => {
-    try {
-      const data = JSON.parse($('#jsonInput').value.trim());
-      if (!data.headers || !data.rows) { showToast('需要 headers 和 rows 字段', 'error'); return; }
-      setResultData(data);
-      showToast('数据已导入', 'success');
-    } catch (e) { showToast('JSON 解析失败: ' + e.message, 'error'); }
-  });
+  if (!zone.querySelector('#dropArea')) {
+    // Re-render if coming from history view
+    location.reload();
+  }
 }
 
 // ── Sidebar ──
 function switchView(view) {
   state.view = view;
   $$('.sidebar-btn').forEach(b => { b.classList.remove('active'); if (b.dataset.panel === view) b.classList.add('active'); });
-  if (view === 'work') renderWork();
-  else if (view === 'history') renderHistory();
+  if (view === 'history') renderHistory();
+  else if (view === 'work') renderWork();
 }
 
 $$('.sidebar-btn').forEach(btn => {
@@ -725,13 +989,16 @@ $$('.sidebar-btn').forEach(btn => {
 
 function showAbout() {
   showModal(`
-    <h3>OCR Workbench v2.0</h3>
-    <p>独立运行的 OCR 识别工作台，无需依赖 AI 对话。</p>
-    <p><strong>引擎：</strong>腾讯云表格识别 v3 (RecognizeTableAccurateOCR)</p>
-    <p><strong>工作流程：</strong>上传 → 点击识别 → 自动调 OCR API → 表格渲染 → 导出 Excel</p>
-    <p><strong>支持：</strong>有线表格 / 无线表格 / 嵌套表格 / 旋转表格 / 多表格</p>
-    <p><strong>数据存储：</strong>浏览器 localStorage，不上传任何服务器（仅OCR调用腾讯云API）</p>
-    <p style="margin-top:12px;color:var(--text-dim)">Powered by 腾讯云 OCR API</p>
+    <h3>OCR Workbench v3.0 — Browser OCR</h3>
+    <p>纯浏览器端 OCR 识别工作台，无需 API 密钥，无需后端服务。</p>
+    <p><strong>引擎：</strong>Tesseract.js v5（浏览器端运行）+ PDF.js</p>
+    <p><strong>工作流程：</strong>上传图片/PDF → 浏览器端 OCR → 自动重建表格 → 导出 Excel</p>
+    <p><strong>支持语言：</strong>中文简/繁、英文、意大利语、荷兰语，可多语言混合识别</p>
+    <p><strong>表格重建：</strong>基于文字坐标自动分行分列，支持调整行容差</p>
+    <p><strong>PDF支持：</strong>自动渲染每页为图片并逐页识别（最多10页）</p>
+    <p><strong>数据存储：</strong>全部在浏览器 localStorage，不上传任何服务器</p>
+    <p><strong>部署：</strong>纯静态 HTML，可直接部署到 Vercel / GitHub Pages / 任意静态托管</p>
+    <p style="margin-top:12px;color:var(--text-dim)">Powered by Tesseract.js · No API keys · No backend</p>
   `);
 }
 
@@ -757,6 +1024,7 @@ $('#modalOverlay').addEventListener('click', e => { if (e.target === $('#modalOv
 gsap.from('.sidebar', { x: -40, opacity: 0, duration: 0.5, ease: 'power2.out' });
 gsap.from('.topbar', { y: -20, opacity: 0, duration: 0.4, delay: 0.1 });
 gsap.from('.drop-area', { y: 20, opacity: 0, duration: 0.5, delay: 0.2 });
+gsap.from('.controls-row', { y: 10, opacity: 0, duration: 0.4, delay: 0.35 });
 
 renderPreviews();
 </script>
