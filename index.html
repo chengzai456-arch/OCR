@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OCR Workbench</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --text-dim: #8b949e;
+  --accent: #58a6ff;
+  --accent-hover: #79c0ff;
+  --green: #3fb950;
+  --orange: #d29922;
+  --red: #f85149;
+  --radius: 6px;
+  --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --mono: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+.app { display: flex; height: 100vh; }
+
+/* Sidebar */
+.sidebar {
+  width: 48px; background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; align-items: center; padding-top: 16px; gap: 8px;
+  flex-shrink: 0; z-index: 10;
+}
+.sidebar-btn {
+  width: 36px; height: 36px; border: none; border-radius: var(--radius);
+  background: transparent; color: var(--text-dim); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; font-size: 14px;
+  transition: all 0.15s; font-family: var(--mono); font-weight: 600;
+}
+.sidebar-btn:hover, .sidebar-btn.active { background: #21262d; color: var(--text); }
+.sidebar-btn.active { border: 1px solid var(--border); }
+
+/* Main */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Top Bar */
+.topbar {
+  height: 48px; background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 20px; gap: 16px; flex-shrink: 0;
+}
+.topbar-title { font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
+.topbar-title span { color: var(--text-dim); font-weight: 400; margin-left: 6px; }
+.topbar-spacer { flex: 1; }
+.topbar-badge {
+  font-size: 11px; font-family: var(--mono); padding: 3px 8px;
+  border-radius: var(--radius); background: #1a2332; border: 1px solid var(--border);
+  color: var(--accent);
+}
+.topbar-badge.green { color: var(--green); border-color: #1a3d26; background: #0d1f14; }
+.topbar-badge.red { color: var(--red); border-color: #3d1a1a; background: #1f0d0d; }
+
+/* Content */
+.content { flex: 1; display: flex; overflow: hidden; }
+
+/* Upload Zone */
+.upload-zone { flex: 1; display: flex; flex-direction: column; overflow-y: auto; padding: 24px; }
+.drop-area {
+  border: 2px dashed var(--border); border-radius: var(--radius);
+  padding: 48px 24px; text-align: center; cursor: pointer; transition: all 0.2s;
+  background: transparent;
+}
+.drop-area:hover, .drop-area.drag-over { border-color: var(--accent); background: rgba(88,166,255,0.04); }
+.drop-area-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.6; }
+.drop-area-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+.drop-area-sub { font-size: 12px; color: var(--text-dim); }
+.drop-area-sub kbd {
+  font-family: var(--mono); background: var(--surface); border: 1px solid var(--border);
+  border-radius: 3px; padding: 1px 5px; font-size: 11px;
+}
+
+/* Preview */
+.preview-area { display: none; margin-top: 20px; }
+.preview-area.visible { display: block; }
+.preview-header {
+  display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+}
+.preview-label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
+.preview-count { font-family: var(--mono); font-size: 11px; color: var(--accent); }
+
+.preview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.preview-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; position: relative; cursor: pointer; transition: border-color 0.15s;
+}
+.preview-card:hover { border-color: var(--accent); }
+.preview-card.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.preview-card.processing { border-color: var(--orange); opacity: 0.7; }
+.preview-card.done { border-color: var(--green); }
+.preview-card.error { border-color: var(--red); }
+.preview-card img {
+  width: 100%; height: 140px; object-fit: contain;
+  background: repeating-conic-gradient(#1a1a2e 0% 25%, #111 0% 50%) 50% / 20px 20px;
+}
+.preview-card-status {
+  position: absolute; top: 6px; right: 6px;
+  font-size: 10px; padding: 2px 6px; border-radius: 3px;
+  font-family: var(--mono);
+}
+.preview-card-status.processing { background: rgba(210,153,34,0.2); color: var(--orange); }
+.preview-card-status.done { background: rgba(63,185,80,0.2); color: var(--green); }
+.preview-card-status.error { background: rgba(248,81,73,0.2); color: var(--red); }
+.preview-card-info { padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.preview-card-name { font-size: 11px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-card-size { font-size: 10px; color: var(--text-dim); font-family: var(--mono); white-space: nowrap; }
+.preview-card-remove {
+  background: none; border: none; color: var(--red); cursor: pointer; font-size: 14px;
+  padding: 2px 4px; opacity: 0; transition: opacity 0.15s;
+}
+.preview-card:hover .preview-card-remove { opacity: 1; }
+
+/* Action Bar */
+.action-bar { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; align-items: center; }
+.btn {
+  padding: 8px 16px; border-radius: var(--radius); border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font-size: 13px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; font-family: var(--font);
+}
+.btn:hover { border-color: var(--accent); color: var(--accent-hover); }
+.btn.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
+.btn.primary:hover { background: #388bfd; border-color: #388bfd; }
+.btn:disabled { opacity: 0.4; pointer-events: none; }
+.progress-bar-wrap {
+  flex: 1; min-width: 200px; height: 6px; background: var(--border); border-radius: 3px;
+  overflow: hidden; display: none;
+}
+.progress-bar-wrap.visible { display: block; }
+.progress-bar-fill {
+  height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s ease;
+}
+
+/* Result Panel */
+.result-panel {
+  width: 0; background: var(--surface); border-left: 1px solid var(--border);
+  overflow: hidden; transition: width 0.3s ease; display: flex; flex-direction: column;
+  flex-shrink: 0;
+}
+.result-panel.open { width: 55%; min-width: 480px; }
+.tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); padding: 0 16px; flex-shrink: 0; }
+.tab {
+  padding: 10px 16px; font-size: 12px; color: var(--text-dim);
+  cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.15s;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--text); border-bottom-color: var(--accent); }
+.result-content { flex: 1; overflow: auto; padding: 16px; }
+
+/* Table */
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th, td { padding: 6px 10px; text-align: left; border-bottom: 1px solid var(--border); min-width: 80px; max-width: 300px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+th { background: #0d1117; font-weight: 600; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; position: sticky; top: 0; z-index: 1; }
+td { font-family: var(--mono); font-size: 11px; }
+td[contenteditable="true"] { cursor: text; outline: 1px dashed transparent; transition: outline-color 0.15s; }
+td[contenteditable="true"]:focus { outline-color: var(--accent); background: rgba(88,166,255,0.06); }
+tr:hover td { background: rgba(88,166,255,0.03); }
+.conf-low { color: var(--red); }
+.conf-mid { color: var(--orange); }
+.conf-high { color: var(--green); }
+
+/* History */
+.history-list.visible { display: block; }
+.history-item {
+  padding: 12px; border: 1px solid var(--border); border-radius: var(--radius);
+  margin-bottom: 8px; cursor: pointer; transition: border-color 0.15s;
+}
+.history-item:hover { border-color: var(--accent); }
+.history-item-header { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+.history-item-name { font-weight: 600; }
+.history-item-time { color: var(--text-dim); font-size: 11px; }
+.history-item-meta { font-size: 11px; color: var(--text-dim); }
+
+/* Empty */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-dim); }
+.empty-state-icon { font-size: 40px; margin-bottom: 12px; opacity: 0.5; }
+.empty-state-text { font-size: 14px; }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: auto; }
+.modal {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;
+}
+.modal h3 { font-size: 16px; margin-bottom: 16px; }
+.modal p { font-size: 13px; color: var(--text-dim); line-height: 1.6; margin-bottom: 10px; }
+.modal code {
+  font-family: var(--mono); font-size: 11px; background: #0d1117;
+  padding: 2px 6px; border-radius: 3px; border: 1px solid var(--border);
+}
+
+/* Toast */
+.toast-container { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 200; }
+.toast {
+  padding: 10px 16px; border-radius: var(--radius); background: var(--surface);
+  border: 1px solid var(--border); font-size: 13px;
+  animation: toastIn 0.3s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.toast.success { border-color: var(--green); color: var(--green); }
+.toast.error { border-color: var(--red); color: var(--red); }
+@keyframes toastIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <nav class="sidebar">
+    <button class="sidebar-btn active" title="工作台" data-panel="work">W</button>
+    <button class="sidebar-btn" title="历史" data-panel="history">H</button>
+    <button class="sidebar-btn" title="关于" data-panel="about">?</button>
+  </nav>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="topbar-title">OCR <span>Workbench</span></div>
+      <div class="topbar-spacer"></div>
+      <div class="topbar-badge green" id="statusBadge">READY</div>
+      <div class="topbar-badge" id="fileCount">0 FILES</div>
+    </header>
+
+    <div class="content">
+      <div class="upload-zone" id="uploadZone">
+        <div class="drop-area" id="dropArea">
+          <div class="drop-area-icon">IMG</div>
+          <div class="drop-area-title">拖拽图片到此处，或点击选择</div>
+          <div class="drop-area-sub">支持 PNG / JPG / BMP / PDF  |  按 <kbd>Ctrl+V</kbd> 粘贴截图</div>
+        </div>
+        <input type="file" id="fileInput" accept="image/png,image/jpeg,image/bmp,image/jpg,application/pdf" multiple hidden>
+
+        <div class="preview-area" id="previewArea">
+          <div class="preview-header">
+            <div class="preview-label">已上传文件</div>
+            <div class="preview-count" id="previewCount">0</div>
+          </div>
+          <div class="preview-grid" id="previewGrid"></div>
+        </div>
+
+        <div class="action-bar" id="actionBar" style="display:none">
+          <button class="btn" id="clearBtn">清空</button>
+          <button class="btn primary" id="recognizeBtn">开始识别</button>
+          <div class="progress-bar-wrap" id="progressBar"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div>
+          <button class="btn" id="exportBtn" disabled>导出 Excel</button>
+          <button class="btn" id="copyBtn" disabled>复制到剪贴板</button>
+        </div>
+
+        <details style="margin-top:20px">
+          <summary style="font-size:12px;color:var(--text-dim);cursor:pointer;padding:8px 0">手动导入 JSON（备用）</summary>
+          <textarea id="jsonInput" placeholder="粘贴结构化 JSON 数据..." style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;resize:vertical;margin-top:8px"></textarea>
+          <button class="btn primary" id="importJsonBtn" style="margin-top:8px">导入</button>
+        </details>
+      </div>
+
+      <div class="result-panel" id="resultPanel">
+        <div class="tabs" id="resultTabs">
+          <div class="tab active" data-tab="table">表格视图</div>
+          <div class="tab" data-tab="raw">原始数据</div>
+        </div>
+        <div class="result-content" id="resultContent">
+          <div class="empty-state">
+            <div class="empty-state-icon">TBL</div>
+            <div class="empty-state-text">识别结果将在此展示</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+<div class="modal-overlay" id="modalOverlay"><div class="modal" id="modalContent"></div></div>
+
+<script>
+// ── State ──
+const state = {
+  files: [],
+  currentData: null,
+  history: [],
+  view: 'work',
+  processing: false,
+};
+
+// ── Init ──
+gsap.registerPlugin(ScrollTrigger);
+loadHistory();
+
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+// ── DOM refs ──
+const dropArea = $('#dropArea');
+const fileInput = $('#fileInput');
+const previewArea = $('#previewArea');
+const previewGrid = $('#previewGrid');
+const previewCount = $('#previewCount');
+const actionBar = $('#actionBar');
+const resultPanel = $('#resultPanel');
+const resultContent = $('#resultContent');
+const resultTabs = $('#resultTabs');
+const statusBadge = $('#statusBadge');
+const fileCountBadge = $('#fileCount');
+const jsonInput = $('#jsonInput');
+const progressBar = $('#progressBar');
+const progressFill = $('#progressFill');
+
+// ── OCR API URL ── (Vercel 部署后设置实际地址)
+const API_BASE = window.OCR_API_URL || '/api/ocr';
+
+// ── File Handling ──
+dropArea.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => addFiles([...e.target.files]));
+
+dropArea.addEventListener('dragover', e => { e.preventDefault(); dropArea.classList.add('drag-over'); });
+dropArea.addEventListener('dragleave', () => dropArea.classList.remove('drag-over'));
+dropArea.addEventListener('drop', e => {
+  e.preventDefault();
+  dropArea.classList.remove('drag-over');
+  addFiles([...e.dataTransfer.files]);
+});
+
+document.addEventListener('paste', e => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  const imageItems = [...items].filter(i => i.type.startsWith('image/'));
+  if (imageItems.length) {
+    e.preventDefault();
+    addFiles(imageItems.map(i => i.getAsFile()).filter(Boolean));
+  }
+});
+
+function addFiles(newFiles) {
+  newFiles.forEach(f => {
+    if (!f) return;
+    const id = Date.now() + '_' + Math.random().toString(36).slice(2);
+    const reader = new FileReader();
+    reader.onload = () => {
+      state.files.push({ id, name: f.name, size: f.size, dataUrl: reader.result, blob: f, status: null, result: null });
+      renderPreviews();
+    };
+    reader.readAsDataURL(f);
+  });
+}
+
+function renderPreviews() {
+  if (!state.files.length) {
+    previewArea.classList.remove('visible');
+    actionBar.style.display = 'none';
+    fileCountBadge.textContent = '0 FILES';
+    return;
+  }
+  previewArea.classList.add('visible');
+  actionBar.style.display = 'flex';
+  fileCountBadge.textContent = state.files.length + ' FILES';
+  previewCount.textContent = state.files.length;
+
+  previewGrid.innerHTML = state.files.map((f, i) => `
+    <div class="preview-card ${f.status || ''}" data-id="${f.id}" data-index="${i}">
+      <img src="${f.dataUrl}" alt="${f.name}" loading="lazy">
+      ${f.status ? `<div class="preview-card-status ${f.status}">${statusLabel(f.status)}</div>` : ''}
+      <div class="preview-card-info">
+        <div>
+          <div class="preview-card-name" title="${f.name}">${f.name}</div>
+          <div class="preview-card-size">${formatSize(f.size)}</div>
+        </div>
+        ${!state.processing ? `<button class="preview-card-remove" title="移除">x</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  if (!state.processing) {
+    previewGrid.querySelectorAll('.preview-card-remove').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const id = btn.closest('.preview-card').dataset.id;
+        state.files = state.files.filter(f => f.id !== id);
+        renderPreviews();
+      });
+    });
+  }
+
+  previewGrid.querySelectorAll('.preview-card').forEach(card => {
+    card.addEventListener('click', () => {
+      if (state.processing) return;
+      card.classList.toggle('selected');
+    });
+  });
+}
+
+function statusLabel(s) {
+  return { processing: '识别中', done: '完成', error: '失败' }[s] || '';
+}
+
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+// ── OCR 识别 ──
+$('#recognizeBtn').addEventListener('click', runRecognition);
+$('#clearBtn').addEventListener('click', () => {
+  state.files = [];
+  state.currentData = null;
+  renderPreviews();
+  closeResult();
+  showToast('已清空', 'success');
+});
+
+async function runRecognition() {
+  if (state.processing) return;
+  if (!state.files.length) { showToast('请先上传图片', 'error'); return; }
+
+  const selected = state.files.filter(f => {
+    const card = previewGrid.querySelector(`[data-id="${f.id}"]`);
+    return card?.classList.contains('selected');
+  });
+  const filesToProcess = selected.length ? selected : state.files;
+
+  state.processing = true;
+  $('#recognizeBtn').disabled = true;
+  statusBadge.textContent = 'PROCESSING';
+  statusBadge.className = 'topbar-badge';
+  progressBar.classList.add('visible');
+  progressFill.style.width = '0%';
+
+  // Reset all file statuses
+  state.files.forEach(f => { f.status = null; f.result = null; });
+  renderPreviews();
+
+  let completed = 0;
+  const total = filesToProcess.length;
+  let allResults = []; // collect all results for merging
+
+  // Process sequentially to respect API rate limit (2 req/s)
+  for (const file of filesToProcess) {
+    file.status = 'processing';
+    renderPreviews();
+    try {
+      const result = await callOCR(file.dataUrl);
+      file.status = 'done';
+      file.result = result;
+      allResults.push({ name: file.name, ...result });
+    } catch (err) {
+      file.status = 'error';
+      file.result = { error: err.message };
+      showToast(`${file.name}: ${err.message}`, 'error');
+    }
+    completed++;
+    progressFill.style.width = (completed / total * 100) + '%';
+    renderPreviews();
+  }
+
+  // Merge results: combine all tables into one view
+  if (allResults.length > 0) {
+    const merged = mergeResults(allResults);
+    setResultData(merged);
+  }
+
+  state.processing = false;
+  $('#recognizeBtn').disabled = false;
+  statusBadge.textContent = 'READY';
+  statusBadge.className = 'topbar-badge green';
+  progressBar.classList.remove('visible');
+
+  const doneCount = filesToProcess.filter(f => f.status === 'done').length;
+  showToast(`识别完成: ${doneCount}/${total} 成功`, doneCount === total ? 'success' : 'error');
+}
+
+async function callOCR(dataUrl) {
+  const resp = await fetch(API_BASE, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageBase64: dataUrl }),
+  });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error || `HTTP ${resp.status}`);
+  return data;
+}
+
+function mergeResults(results) {
+  if (results.length === 1) return results[0];
+  // Merge all table rows
+  const allHeaders = results[0].headers || [];
+  const allRows = results.flatMap(r => r.rows || []);
+  return {
+    headers: allHeaders,
+    rows: allRows,
+    meta: {
+      source: results.map(r => r.meta?.source || r.name).join(', '),
+      tables: results.reduce((s, r) => s + (r.meta?.tables || 0), 0),
+      merged: true,
+      files: results.length,
+    },
+  };
+}
+
+// ── Result Display ──
+function setResultData(data) {
+  state.currentData = data;
+  resultPanel.classList.add('open');
+  $('#exportBtn').disabled = false;
+  $('#copyBtn').disabled = false;
+  renderTable();
+  saveHistory(data);
+}
+
+function renderTable() {
+  const { headers, rows, meta } = state.currentData;
+  if (!headers.length && !rows.length) {
+    resultContent.innerHTML = `<div class="empty-state"><div class="empty-state-icon">TBL</div><div class="empty-state-text">未识别到表格数据</div></div>`;
+    return;
+  }
+  resultContent.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr></thead>
+        <tbody>${rows.map((row, ri) => `
+          <tr>${row.map((cell, ci) => {
+            const hasLowConf = typeof cell === 'string' && cell.includes('[低置信度:');
+            return `<td contenteditable="true" data-row="${ri}" data-col="${ci}"${hasLowConf ? ' class="conf-low"' : ''}>${cell ?? ''}</td>`;
+          }).join('')}</tr>
+        `).join('')}</tbody>
+      </table>
+    </div>
+    ${meta ? `<div style="margin-top:12px;font-size:11px;color:var(--text-dim);font-family:var(--mono)">${JSON.stringify(meta)}</div>` : ''}
+  `;
+  resultContent.querySelectorAll('td[contenteditable]').forEach(td => {
+    td.addEventListener('blur', () => {
+      const ri = parseInt(td.dataset.row);
+      const ci = parseInt(td.dataset.col);
+      if (state.currentData?.rows[ri]) state.currentData.rows[ri][ci] = td.textContent;
+    });
+  });
+}
+
+function renderRaw() {
+  resultContent.innerHTML = `<pre style="font-family:var(--mono);font-size:11px;line-height:1.6;overflow:auto;max-height:100%">${JSON.stringify(state.currentData, null, 2)}</pre>`;
+}
+
+function closeResult() {
+  resultPanel.classList.remove('open');
+  $('#exportBtn').disabled = true;
+  $('#copyBtn').disabled = true;
+}
+
+// ── Tabs ──
+resultTabs.addEventListener('click', e => {
+  if (!e.target.classList.contains('tab')) return;
+  resultTabs.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  e.target.classList.add('active');
+  if (e.target.dataset.tab === 'table') renderTable();
+  if (e.target.dataset.tab === 'raw') renderRaw();
+});
+
+// ── Export ──
+$('#exportBtn').addEventListener('click', () => {
+  if (!state.currentData) { showToast('无数据可导出', 'error'); return; }
+  const { headers, rows } = state.currentData;
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+  XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+  XLSX.writeFile(wb, 'ocr_result_' + new Date().toISOString().slice(0,10) + '.xlsx');
+  showToast('Excel 导出成功', 'success');
+});
+
+$('#copyBtn').addEventListener('click', () => {
+  if (!state.currentData) { showToast('无数据可复制', 'error'); return; }
+  const text = [state.currentData.headers, ...state.currentData.rows]
+    .map(r => r.join('\t')).join('\n');
+  navigator.clipboard.writeText(text).then(() => showToast('已复制到剪贴板', 'success'));
+});
+
+// ── JSON Import (Fallback) ──
+$('#importJsonBtn').addEventListener('click', () => {
+  try {
+    const data = JSON.parse(jsonInput.value.trim());
+    if (!data.headers || !data.rows) { showToast('需要 headers 和 rows 字段', 'error'); return; }
+    setResultData(data);
+    showToast('数据已导入', 'success');
+  } catch (e) { showToast('JSON 解析失败: ' + e.message, 'error'); }
+});
+
+// ── History ──
+function saveHistory(data) {
+  const entry = {
+    id: Date.now(),
+    time: new Date().toLocaleString('zh-CN'),
+    name: data.meta?.source || '未命名',
+    rowCount: data.rows?.length || 0,
+    colCount: data.headers?.length || 0,
+    data: data,
+  };
+  state.history.unshift(entry);
+  if (state.history.length > 50) state.history.pop();
+  localStorage.setItem('ocr_history', JSON.stringify(state.history));
+}
+
+function loadHistory() {
+  try { state.history = JSON.parse(localStorage.getItem('ocr_history') || '[]'); }
+  catch { state.history = []; }
+}
+
+function renderHistory() {
+  const zone = $('#uploadZone');
+  if (!state.history.length) {
+    zone.innerHTML = `<div class="empty-state"><div class="empty-state-icon">HST</div><div class="empty-state-text">暂无历史记录</div></div>`;
+    return;
+  }
+  zone.innerHTML = `<div class="history-list visible">${state.history.map(h => `
+    <div class="history-item" data-id="${h.id}">
+      <div class="history-item-header">
+        <div class="history-item-name">${h.name}</div>
+        <div class="history-item-time">${h.time}</div>
+      </div>
+      <div class="history-item-meta">${h.rowCount} 行 x ${h.colCount} 列</div>
+    </div>
+  `).join('')}</div>`;
+
+  zone.querySelectorAll('.history-item').forEach(item => {
+    item.addEventListener('click', () => {
+      const id = parseInt(item.dataset.id);
+      const entry = state.history.find(h => h.id === id);
+      if (entry) {
+        setResultData(entry.data);
+        switchView('work');
+      }
+    });
+  });
+}
+
+function renderWork() {
+  const zone = $('#uploadZone');
+  zone.innerHTML = `
+    <div class="drop-area" id="dropArea">
+      <div class="drop-area-icon">IMG</div>
+      <div class="drop-area-title">拖拽图片到此处，或点击选择</div>
+      <div class="drop-area-sub">支持 PNG / JPG / BMP / PDF  |  按 <kbd>Ctrl+V</kbd> 粘贴截图</div>
+    </div>
+    <input type="file" id="fileInput" accept="image/png,image/jpeg,image/bmp,image/jpg,application/pdf" multiple hidden>
+    <div class="preview-area" id="previewArea"><div class="preview-header"><div class="preview-label">已上传文件</div><div class="preview-count" id="previewCount">0</div></div><div class="preview-grid" id="previewGrid"></div></div>
+    <div class="action-bar" id="actionBar" style="display:none">
+      <button class="btn" id="clearBtn">清空</button>
+      <button class="btn primary" id="recognizeBtn">开始识别</button>
+      <div class="progress-bar-wrap" id="progressBar"><div class="progress-bar-fill" id="progressFill" style="width:0%"></div></div>
+      <button class="btn" id="exportBtn" disabled>导出 Excel</button>
+      <button class="btn" id="copyBtn" disabled>复制到剪贴板</button>
+    </div>
+    <details style="margin-top:20px">
+      <summary style="font-size:12px;color:var(--text-dim);cursor:pointer;padding:8px 0">手动导入 JSON（备用）</summary>
+      <textarea id="jsonInput" placeholder="粘贴结构化 JSON 数据..." style="width:100%;height:100px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-family:var(--mono);font-size:11px;padding:10px;resize:vertical;margin-top:8px"></textarea>
+      <button class="btn primary" id="importJsonBtn" style="margin-top:8px">导入</button>
+    </details>
+  `;
+  rebindWorkEvents();
+  renderPreviews();
+}
+
+function rebindWorkEvents() {
+  const d = $('#dropArea');
+  const fi = $('#fileInput');
+  d?.addEventListener('click', () => fi?.click());
+  fi?.addEventListener('change', e => addFiles([...e.target.files]));
+  d?.addEventListener('dragover', e => { e.preventDefault(); d.classList.add('drag-over'); });
+  d?.addEventListener('dragleave', () => d.classList.remove('drag-over'));
+  d?.addEventListener('drop', e => { e.preventDefault(); d.classList.remove('drag-over'); addFiles([...e.dataTransfer.files]); });
+  $('#clearBtn')?.addEventListener('click', () => { state.files = []; state.currentData = null; renderPreviews(); closeResult(); });
+  $('#recognizeBtn')?.addEventListener('click', runRecognition);
+  $('#exportBtn')?.addEventListener('click', () => state.currentData && (() => {
+    const { headers, rows } = state.currentData;
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+    XLSX.writeFile(wb, 'ocr_result_' + new Date().toISOString().slice(0,10) + '.xlsx');
+    showToast('Excel 导出成功', 'success');
+  })());
+  $('#copyBtn')?.addEventListener('click', () => {
+    if (!state.currentData) return;
+    const text = [state.currentData.headers, ...state.currentData.rows].map(r => r.join('\t')).join('\n');
+    navigator.clipboard.writeText(text).then(() => showToast('已复制', 'success'));
+  });
+  $('#importJsonBtn')?.addEventListener('click', () => {
+    try {
+      const data = JSON.parse($('#jsonInput').value.trim());
+      if (!data.headers || !data.rows) { showToast('需要 headers 和 rows 字段', 'error'); return; }
+      setResultData(data);
+      showToast('数据已导入', 'success');
+    } catch (e) { showToast('JSON 解析失败: ' + e.message, 'error'); }
+  });
+}
+
+// ── Sidebar ──
+function switchView(view) {
+  state.view = view;
+  $$('.sidebar-btn').forEach(b => { b.classList.remove('active'); if (b.dataset.panel === view) b.classList.add('active'); });
+  if (view === 'work') renderWork();
+  else if (view === 'history') renderHistory();
+}
+
+$$('.sidebar-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const panel = btn.dataset.panel;
+    if (panel === 'work' || panel === 'history') switchView(panel);
+    else if (panel === 'about') showAbout();
+  });
+});
+
+function showAbout() {
+  showModal(`
+    <h3>OCR Workbench v2.0</h3>
+    <p>独立运行的 OCR 识别工作台，无需依赖 AI 对话。</p>
+    <p><strong>引擎：</strong>腾讯云表格识别 v3 (RecognizeTableAccurateOCR)</p>
+    <p><strong>工作流程：</strong>上传 → 点击识别 → 自动调 OCR API → 表格渲染 → 导出 Excel</p>
+    <p><strong>支持：</strong>有线表格 / 无线表格 / 嵌套表格 / 旋转表格 / 多表格</p>
+    <p><strong>数据存储：</strong>浏览器 localStorage，不上传任何服务器（仅OCR调用腾讯云API）</p>
+    <p style="margin-top:12px;color:var(--text-dim)">Powered by 腾讯云 OCR API</p>
+  `);
+}
+
+// ── Toast ──
+function showToast(msg, type = '') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  $('#toastContainer').appendChild(el);
+  setTimeout(() => { el.style.opacity = '0'; el.style.transition = 'opacity 0.3s'; }, 2500);
+  setTimeout(() => el.remove(), 2800);
+}
+
+// ── Modal ──
+function showModal(html) {
+  $('#modalContent').innerHTML = html + `<button class="btn" onclick="closeModal()" style="margin-top:16px">关闭</button>`;
+  $('#modalOverlay').classList.add('open');
+}
+function closeModal() { $('#modalOverlay').classList.remove('open'); }
+$('#modalOverlay').addEventListener('click', e => { if (e.target === $('#modalOverlay')) closeModal(); });
+
+// ── GSAP Entrance ──
+gsap.from('.sidebar', { x: -40, opacity: 0, duration: 0.5, ease: 'power2.out' });
+gsap.from('.topbar', { y: -20, opacity: 0, duration: 0.4, delay: 0.1 });
+gsap.from('.drop-area', { y: 20, opacity: 0, duration: 0.5, delay: 0.2 });
+
+renderPreviews();
+</script>
+</body>
+</html>

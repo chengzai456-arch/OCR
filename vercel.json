@@ -1,0 +1,5 @@
+{
+  "rewrites": [{ "source": "/api/ocr", "destination": "/api/ocr" }],
+  "buildCommand": "",
+  "outputDirectory": "."
+}
