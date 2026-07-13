@@ -1,7 +1,7 @@
 {
   "name": "ocr-workbench",
-  "version": "3.0.0",
-  "description": "Browser-based OCR Workbench — Tesseract.js + PDF.js, no API keys, no backend",
+  "version": "4.0.0",
+  "description": "Dual-engine OCR Workbench — Tesseract.js (browser) + Tencent Cloud OCR (serverless proxy)",
   "private": true,
   "scripts": {
     "dev": "npx serve .",

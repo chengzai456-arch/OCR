@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>OCR Workbench — Browser OCR</title>
+<title>OCR Workbench — Dual Engine</title>
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.7/dist/gsap.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
@@ -21,6 +21,7 @@
   --green: #3fb950;
   --orange: #d29922;
   --red: #f85149;
+  --purple: #a371f7;
   --radius: 6px;
   --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
   --mono: 'Cascadia Code', 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
@@ -53,19 +54,27 @@ body {
 /* Top Bar */
 .topbar {
   height: 48px; background: var(--surface); border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; padding: 0 20px; gap: 16px; flex-shrink: 0;
+  display: flex; align-items: center; padding: 0 20px; gap: 12px; flex-shrink: 0;
 }
 .topbar-title { font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
 .topbar-title span { color: var(--text-dim); font-weight: 400; margin-left: 6px; }
 .topbar-spacer { flex: 1; }
 .topbar-badge {
   font-size: 11px; font-family: var(--mono); padding: 3px 8px;
-  border-radius: var(--radius); background: #1a2332; border: 1px solid var(--border);
-  color: var(--accent);
+  border-radius: var(--radius); border: 1px solid var(--border);
+  display: flex; align-items: center; gap: 6px;
 }
 .topbar-badge.green { color: var(--green); border-color: #1a3d26; background: #0d1f14; }
 .topbar-badge.red { color: var(--red); border-color: #3d1a1a; background: #1f0d0d; }
 .topbar-badge.orange { color: var(--orange); border-color: #3d3a1a; background: #1f1d0d; }
+.topbar-badge.blue { color: var(--accent); border-color: #1a2a3d; background: #0d1724; }
+
+/* Engine indicator dot */
+.engine-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+  display: inline-block; flex-shrink: 0;
+}
+.engine-dot.tencent { background: var(--purple); }
 
 /* Content */
 .content { flex: 1; display: flex; overflow: hidden; }
@@ -74,7 +83,7 @@ body {
 .upload-zone { flex: 1; display: flex; flex-direction: column; overflow-y: auto; padding: 24px; }
 .drop-area {
   border: 2px dashed var(--border); border-radius: var(--radius);
-  padding: 48px 24px; text-align: center; cursor: pointer; transition: all 0.2s;
+  padding: 40px 24px; text-align: center; cursor: pointer; transition: all 0.2s;
   background: transparent;
 }
 .drop-area:hover, .drop-area.drag-over { border-color: var(--accent); background: rgba(88,166,255,0.04); }
@@ -97,6 +106,37 @@ body {
   color: var(--text); font-size: 12px; padding: 4px 8px; font-family: var(--font); cursor: pointer;
 }
 .control-select:focus { border-color: var(--accent); outline: none; }
+.control-divider { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+
+/* API Key Section */
+.api-key-section {
+  display: none; margin-top: 12px; padding: 14px 16px;
+  background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+  flex-wrap: wrap; gap: 12px; align-items: flex-end;
+}
+.api-key-section.visible { display: flex; }
+.api-key-field { display: flex; flex-direction: column; gap: 4px; }
+.api-key-field label {
+  font-size: 10px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em;
+}
+.api-key-input {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text); font-size: 12px; font-family: var(--mono); padding: 6px 10px;
+  width: 280px; transition: border-color 0.15s;
+}
+.api-key-input:focus { border-color: var(--accent); outline: none; }
+.api-key-input::placeholder { color: #484f58; }
+.api-key-toggle {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text-dim); font-size: 11px; padding: 6px 10px; cursor: pointer;
+  font-family: var(--font); transition: all 0.15s;
+}
+.api-key-toggle:hover { border-color: var(--accent); color: var(--text); }
+.api-key-status {
+  font-size: 11px; padding: 4px 10px; border-radius: var(--radius); font-family: var(--mono);
+}
+.api-key-status.set { color: var(--green); background: rgba(63,185,80,0.1); border: 1px solid #1a3d26; }
+.api-key-status.unset { color: var(--orange); background: rgba(210,153,34,0.1); border: 1px solid #3d3a1a; }
 
 /* Preview */
 .preview-area { display: none; margin-top: 20px; }
@@ -131,6 +171,9 @@ body {
 .preview-card-info { padding: 8px 10px; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .preview-card-name { font-size: 11px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preview-card-size { font-size: 10px; color: var(--text-dim); font-family: var(--mono); white-space: nowrap; }
+.preview-card-engine { font-size: 10px; padding: 1px 5px; border-radius: 3px; font-family: var(--mono); }
+.preview-card-engine.tesseract { color: var(--green); background: rgba(63,185,80,0.1); }
+.preview-card-engine.tencent { color: var(--purple); background: rgba(163,113,247,0.1); }
 .preview-card-remove {
   background: none; border: none; color: var(--red); cursor: pointer; font-size: 14px;
   padding: 2px 4px; opacity: 0; transition: opacity 0.15s;
@@ -147,6 +190,8 @@ body {
 .btn:hover { border-color: var(--accent); color: var(--accent-hover); }
 .btn.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; }
 .btn.primary:hover { background: #388bfd; border-color: #388bfd; }
+.btn.primary.purple { background: #7c3aed; border-color: #7c3aed; }
+.btn.primary.purple:hover { background: #8b5cf6; border-color: #8b5cf6; }
 .btn:disabled { opacity: 0.4; pointer-events: none; }
 .progress-bar-wrap {
   flex: 1; min-width: 200px; height: 6px; background: var(--border); border-radius: 3px;
@@ -156,8 +201,9 @@ body {
 .progress-bar-fill {
   height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.3s ease;
 }
+.progress-bar-fill.tencent { background: var(--purple); }
 .progress-text {
-  font-size: 11px; font-family: var(--mono); color: var(--text-dim); min-width: 80px; text-align: right;
+  font-size: 11px; font-family: var(--mono); color: var(--text-dim); min-width: 100px; text-align: right;
 }
 
 /* Result Panel */
@@ -211,14 +257,24 @@ tr:hover td { background: rgba(88,166,255,0.03); }
 .modal-overlay.open { opacity: 1; pointer-events: auto; }
 .modal {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 24px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;
+  padding: 24px; max-width: 640px; width: 90%; max-height: 80vh; overflow-y: auto;
 }
 .modal h3 { font-size: 16px; margin-bottom: 16px; }
-.modal p { font-size: 13px; color: var(--text-dim); line-height: 1.6; margin-bottom: 10px; }
+.modal h4 { font-size: 13px; margin: 14px 0 6px; color: var(--accent); }
+.modal p { font-size: 13px; color: var(--text-dim); line-height: 1.6; margin-bottom: 8px; }
 .modal code {
   font-family: var(--mono); font-size: 11px; background: #0d1117;
   padding: 2px 6px; border-radius: 3px; border: 1px solid var(--border);
 }
+.modal .engine-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+.modal .engine-card {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 14px;
+}
+.modal .engine-card h4 { margin: 0 0 8px; font-size: 13px; }
+.modal .engine-card ul { list-style: none; padding: 0; }
+.modal .engine-card li { font-size: 12px; color: var(--text-dim); padding: 3px 0; }
+.modal .engine-card li::before { content: '· '; color: var(--accent); }
 
 /* Toast */
 .toast-container { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 200; }
@@ -254,6 +310,7 @@ tr:hover td { background: rgba(88,166,255,0.03); }
   overflow: hidden; margin-top: 12px;
 }
 .loading-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.3s; }
+.loading-bar-fill.tencent { background: var(--purple); }
 </style>
 </head>
 <body>
@@ -269,6 +326,10 @@ tr:hover td { background: rgba(88,166,255,0.03); }
     <header class="topbar">
       <div class="topbar-title">OCR <span>Workbench</span></div>
       <div class="topbar-spacer"></div>
+      <div class="topbar-badge blue" id="engineBadge">
+        <span class="engine-dot" id="engineDot"></span>
+        <span id="engineLabel">Tesseract.js</span>
+      </div>
       <div class="topbar-badge green" id="statusBadge">READY</div>
       <div class="topbar-badge" id="fileCount">0 FILES</div>
     </header>
@@ -284,6 +345,14 @@ tr:hover td { background: rgba(88,166,255,0.03); }
 
         <div class="controls-row">
           <div class="control-group">
+            <span class="control-label">引擎</span>
+            <select class="control-select" id="engineSelect">
+              <option value="tesseract" selected>Tesseract.js（免费·浏览器端）</option>
+              <option value="tencent">腾讯云 OCR（高精度·需密钥）</option>
+            </select>
+          </div>
+          <div class="control-divider"></div>
+          <div class="control-group" id="langGroup">
             <span class="control-label">语言</span>
             <select class="control-select" id="langSelect">
               <option value="eng">English</option>
@@ -305,7 +374,7 @@ tr:hover td { background: rgba(88,166,255,0.03); }
               <option value="text">纯文本</option>
             </select>
           </div>
-          <div class="control-group">
+          <div class="control-group" id="toleranceGroup">
             <span class="control-label">表格行容差</span>
             <select class="control-select" id="rowTolerance">
               <option value="8">8px (严格)</option>
@@ -314,6 +383,21 @@ tr:hover td { background: rgba(88,166,255,0.03); }
               <option value="30">30px (极宽)</option>
             </select>
           </div>
+        </div>
+
+        <!-- Tencent Cloud API Key Section -->
+        <div class="api-key-section" id="apiKeySection">
+          <div class="api-key-field">
+            <label>SecretId</label>
+            <input class="api-key-input" id="secretIdInput" type="password" placeholder="AKIDxxxxxxxxxxxxxxxx" autocomplete="off">
+          </div>
+          <div class="api-key-field">
+            <label>SecretKey</label>
+            <input class="api-key-input" id="secretKeyInput" type="password" placeholder="xxxxxxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+          </div>
+          <button class="api-key-toggle" id="toggleKeyBtn" title="显示/隐藏密钥">显示</button>
+          <button class="api-key-toggle" id="saveKeyBtn">保存密钥</button>
+          <span class="api-key-status unset" id="keyStatus">未配置</span>
         </div>
 
         <div class="preview-area" id="previewArea">
@@ -360,7 +444,7 @@ tr:hover td { background: rgba(88,166,255,0.03); }
 <div class="loading-overlay" id="loadingOverlay">
   <div class="loading-box">
     <div class="loading-spinner"></div>
-    <div class="loading-text" id="loadingText">正在初始化 OCR 引擎...</div>
+    <div class="loading-text" id="loadingText">正在初始化...</div>
     <div class="loading-progress" id="loadingProgress"></div>
     <div class="loading-bar"><div class="loading-bar-fill" id="loadingBarFill" style="width:0%"></div></div>
   </div>
@@ -382,6 +466,8 @@ const state = {
   view: 'work',
   processing: false,
   activeTab: 'table',
+  engine: 'tesseract', // 'tesseract' | 'tencent'
+  tencentKeys: { secretId: '', secretKey: '', showKeys: false },
 };
 
 const $ = s => document.querySelector(s);
@@ -389,6 +475,8 @@ const $$ = s => document.querySelectorAll(s);
 
 // ── Init ──
 loadHistory();
+loadTencentKeys();
+applyEngine();
 
 // ── DOM refs ──
 const dropArea = $('#dropArea');
@@ -402,10 +490,105 @@ const resultContent = $('#resultContent');
 const resultTabs = $('#resultTabs');
 const statusBadge = $('#statusBadge');
 const fileCountBadge = $('#fileCount');
+const engineBadge = $('#engineBadge');
+const engineDot = $('#engineDot');
+const engineLabel = $('#engineLabel');
 const loadingOverlay = $('#loadingOverlay');
 const loadingText = $('#loadingText');
 const loadingProgress = $('#loadingProgress');
 const loadingBarFill = $('#loadingBarFill');
+const engineSelect = $('#engineSelect');
+const apiKeySection = $('#apiKeySection');
+const toleranceGroup = $('#toleranceGroup');
+const langGroup = $('#langGroup');
+const keyStatus = $('#keyStatus');
+const progressFill = $('#progressFill');
+const progressBar = $('#progressBar');
+
+// ── Engine Switching ──
+engineSelect.addEventListener('change', () => {
+  state.engine = engineSelect.value;
+  applyEngine();
+});
+
+function applyEngine() {
+  const isTesseract = state.engine === 'tesseract';
+  engineSelect.value = state.engine;
+
+  // Update topbar badge
+  if (isTesseract) {
+    engineDot.className = 'engine-dot';
+    engineLabel.textContent = 'Tesseract.js';
+    engineBadge.className = 'topbar-badge blue';
+  } else {
+    engineDot.className = 'engine-dot tencent';
+    engineLabel.textContent = '腾讯云 OCR';
+    engineBadge.className = 'topbar-badge blue';
+  }
+
+  // Show/hide sections
+  apiKeySection.classList.toggle('visible', !isTesseract);
+  toleranceGroup.style.display = isTesseract ? '' : 'none';
+  langGroup.style.display = isTesseract ? '' : 'none';
+
+  // Update progress bar color
+  progressFill.className = isTesseract ? 'progress-bar-fill' : 'progress-bar-fill tencent';
+  loadingBarFill.className = isTesseract ? 'loading-bar-fill' : 'loading-bar-fill tencent';
+
+  // Update recognize button
+  const btn = $('#recognizeBtn');
+  btn.className = isTesseract ? 'btn primary' : 'btn primary purple';
+  btn.innerHTML = isTesseract ? '开始识别' : '开始识别 <span style="font-size:10px;opacity:0.7">(腾讯云)</span>';
+
+  // Update key status display
+  updateKeyStatus();
+}
+
+// ── API Key Management ──
+function loadTencentKeys() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('ocr_tencent_keys') || '{}');
+    state.tencentKeys.secretId = stored.secretId || '';
+    state.tencentKeys.secretKey = stored.secretKey || '';
+  } catch { /* ignore */ }
+  if (state.tencentKeys.secretId) {
+    $('#secretIdInput').value = state.tencentKeys.secretId;
+  }
+  if (state.tencentKeys.secretKey) {
+    $('#secretKeyInput').value = state.tencentKeys.secretKey;
+  }
+  updateKeyStatus();
+}
+
+function saveTencentKeys() {
+  state.tencentKeys.secretId = $('#secretIdInput').value.trim();
+  state.tencentKeys.secretKey = $('#secretKeyInput').value.trim();
+  localStorage.setItem('ocr_tencent_keys', JSON.stringify({
+    secretId: state.tencentKeys.secretId,
+    secretKey: state.tencentKeys.secretKey,
+  }));
+  updateKeyStatus();
+  showToast('密钥已保存到本地浏览器', 'success');
+}
+
+function updateKeyStatus() {
+  const hasKeys = !!(state.tencentKeys.secretId && state.tencentKeys.secretKey);
+  keyStatus.textContent = hasKeys ? '已配置' : '未配置';
+  keyStatus.className = 'api-key-status ' + (hasKeys ? 'set' : 'unset');
+}
+
+$('#saveKeyBtn').addEventListener('click', saveTencentKeys);
+$('#toggleKeyBtn').addEventListener('click', () => {
+  state.tencentKeys.showKeys = !state.tencentKeys.showKeys;
+  const type = state.tencentKeys.showKeys ? 'text' : 'password';
+  $('#secretIdInput').type = type;
+  $('#secretKeyInput').type = type;
+  $('#toggleKeyBtn').textContent = state.tencentKeys.showKeys ? '隐藏' : '显示';
+});
+
+// Auto-save on input blur
+$('#secretIdInput').addEventListener('blur', saveTencentKeys);
+$('#secretKeyInput').addEventListener('blur', saveTencentKeys);
 
 // ── File Handling ──
 dropArea.addEventListener('click', () => fileInput.click());
@@ -434,7 +617,6 @@ async function addFiles(newFiles) {
     if (!f) continue;
     const id = Date.now() + '_' + Math.random().toString(36).slice(2);
     if (f.type === 'application/pdf') {
-      // PDF: render first page as thumbnail
       try {
         const arrayBuffer = await f.arrayBuffer();
         const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
@@ -475,9 +657,9 @@ function renderPreviews() {
       ${f.isPdf ? `<div class="preview-card-status" style="background:rgba(88,166,255,0.2);color:var(--accent)">PDF</div>` : ''}
       ${f.status ? `<div class="preview-card-status ${f.status}">${statusLabel(f.status)}</div>` : ''}
       <div class="preview-card-info">
-        <div>
+        <div style="flex:1;min-width:0">
           <div class="preview-card-name" title="${f.name}">${f.name}</div>
-          <div class="preview-card-size">${formatSize(f.size)}${f.isPdf ? ' · ' + (f.pdfPages || '?') + 'p' : ''}</div>
+          <div class="preview-card-size">${formatSize(f.size)}${f.isPdf ? ' · ' + (f.pdfPages || '?') + 'p' : ''} · <span class="preview-card-engine ${f.engine || (state.engine === 'tencent' ? 'tencent' : 'tesseract')}">${(f.engine || state.engine) === 'tencent' ? 'TX' : 'TS'}</span></div>
         </div>
         ${!state.processing ? `<button class="preview-card-remove" title="移除">x</button>` : ''}
       </div>
@@ -513,7 +695,10 @@ function formatSize(bytes) {
   return (bytes / 1048576).toFixed(1) + ' MB';
 }
 
-// ── OCR Engine ──
+// ══════════════════════════════════════════
+//  ENGINE: Tesseract.js (Browser-side)
+// ══════════════════════════════════════════
+
 let tesseractWorker = null;
 
 async function getWorker(lang) {
@@ -522,7 +707,7 @@ async function getWorker(lang) {
   }
   loadingText.textContent = '加载语言包: ' + lang;
   loadingOverlay.classList.add('open');
-  
+
   tesseractWorker = await Tesseract.createWorker(lang, 1, {
     logger: m => {
       if (m.status === 'recognizing text') {
@@ -535,12 +720,111 @@ async function getWorker(lang) {
       }
     }
   });
-  
+
   loadingOverlay.classList.remove('open');
   return tesseractWorker;
 }
 
-// ── Recognition ──
+function reconstructTable(words, tolerance = 12) {
+  if (!words || !words.length) return { headers: [], rows: [] };
+  words = words.filter(w => w.text && w.text.trim() && w.confidence > 30);
+  if (!words.length) return { headers: [], rows: [] };
+
+  words.sort((a, b) => a.bbox.y0 - b.bbox.y0);
+
+  const rows = [];
+  let currentRow = [words[0]];
+  let currentY = (words[0].bbox.y0 + words[0].bbox.y1) / 2;
+
+  for (let i = 1; i < words.length; i++) {
+    const w = words[i];
+    const wY = (w.bbox.y0 + w.bbox.y1) / 2;
+    if (Math.abs(wY - currentY) <= tolerance) {
+      currentRow.push(w);
+      currentY = currentRow.reduce((s, w) => s + (w.bbox.y0 + w.bbox.y1) / 2, 0) / currentRow.length;
+    } else {
+      rows.push(currentRow);
+      currentRow = [w];
+      currentY = wY;
+    }
+  }
+  if (currentRow.length) rows.push(currentRow);
+
+  rows.forEach(r => r.sort((a, b) => a.bbox.x0 - b.bbox.x0));
+
+  const allXCenters = words.map(w => (w.bbox.x0 + w.bbox.x1) / 2).sort((a, b) => a - b);
+  const colThreshold = 25;
+  const colClusters = [];
+  let currentCluster = [allXCenters[0]];
+
+  for (let i = 1; i < allXCenters.length; i++) {
+    if (allXCenters[i] - currentCluster[currentCluster.length - 1] <= colThreshold) {
+      currentCluster.push(allXCenters[i]);
+    } else {
+      colClusters.push(currentCluster);
+      currentCluster = [allXCenters[i]];
+    }
+  }
+  if (currentCluster.length) colClusters.push(currentCluster);
+
+  const colCenters = colClusters.map(c => c.reduce((s, x) => s + x, 0) / c.length);
+  const numCols = colCenters.length;
+
+  const tableRows = rows.map(rowWords => {
+    const cells = new Array(numCols).fill('');
+    for (const w of rowWords) {
+      const wX = (w.bbox.x0 + w.bbox.x1) / 2;
+      let minDist = Infinity, nearestCol = 0;
+      for (let c = 0; c < colCenters.length; c++) {
+        const dist = Math.abs(wX - colCenters[c]);
+        if (dist < minDist) { minDist = dist; nearestCol = c; }
+      }
+      cells[nearestCol] = (cells[nearestCol] ? cells[nearestCol] + ' ' : '') + w.text.trim();
+    }
+    return cells;
+  });
+
+  let headers = [];
+  let dataRows = tableRows;
+  if (tableRows.length > 1) {
+    const filledCount = tableRows[0].filter(c => c.trim()).length;
+    if (filledCount >= Math.ceil(numCols * 0.6)) {
+      headers = tableRows[0].map((c, i) => c.trim() || '列' + (i + 1));
+      dataRows = tableRows.slice(1);
+    }
+  }
+  if (!headers.length) headers = Array.from({ length: numCols }, (_, i) => '列' + (i + 1));
+
+  return { headers, rows: dataRows };
+}
+
+// ══════════════════════════════════════════
+//  ENGINE: Tencent Cloud OCR (via proxy)
+// ══════════════════════════════════════════
+
+async function callTencentOCR(imageBase64) {
+  const { secretId, secretKey } = state.tencentKeys;
+  if (!secretId || !secretKey) throw new Error('请先配置腾讯云 API 密钥');
+
+  const resp = await fetch('/api/ocr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      ImageBase64: imageBase64,
+      SecretId: secretId,
+      SecretKey: secretKey,
+    }),
+  });
+
+  const data = await resp.json();
+  if (!resp.ok || data.error) throw new Error(data.error || 'OCR 请求失败 (' + resp.status + ')');
+  return data;
+}
+
+// ══════════════════════════════════════════
+//  Recognition Orchestrator
+// ══════════════════════════════════════════
+
 $('#recognizeBtn').addEventListener('click', runRecognition);
 $('#clearBtn').addEventListener('click', () => {
   state.files = [];
@@ -554,11 +838,33 @@ async function runRecognition() {
   if (state.processing) return;
   if (!state.files.length) { showToast('请先上传文件', 'error'); return; }
 
+  if (state.engine === 'tencent') {
+    // Validate keys
+    if (!state.tencentKeys.secretId || !state.tencentKeys.secretKey) {
+      showToast('请先配置腾讯云 API 密钥（SecretId + SecretKey）', 'error');
+      apiKeySection.scrollIntoView({ behavior: 'smooth' });
+      return;
+    }
+  }
+
   const selected = state.files.filter(f => {
     const card = previewGrid.querySelector(`[data-id="${f.id}"]`);
     return card?.classList.contains('selected');
   });
   const filesToProcess = selected.length ? selected : state.files;
+
+  // Mark engine on files
+  filesToProcess.forEach(f => { f.engine = state.engine; });
+
+  if (state.engine === 'tesseract') {
+    await runTesseract(filesToProcess);
+  } else {
+    await runTencentCloud(filesToProcess);
+  }
+}
+
+// ── Tesseract Pipeline ──
+async function runTesseract(filesToProcess) {
   const lang = $('#langSelect').value;
   const mode = $('#modeSelect').value;
   const tolerance = parseInt($('#rowTolerance').value);
@@ -567,31 +873,25 @@ async function runRecognition() {
   $('#recognizeBtn').disabled = true;
   statusBadge.textContent = 'PROCESSING';
   statusBadge.className = 'topbar-badge orange';
-  $('#progressBar').classList.add('visible');
-  $('#progressFill').style.width = '0%';
+  progressBar.classList.add('visible');
+  progressFill.style.width = '0%';
   $('#progressText').textContent = '';
 
-  // Init worker
-  loadingText.textContent = '初始化 OCR 引擎...';
+  loadingText.textContent = '初始化 Tesseract.js...';
   loadingProgress.textContent = '';
   loadingBarFill.style.width = '0%';
   loadingOverlay.classList.add('open');
-  
+
   try {
     await getWorker(lang);
   } catch (err) {
     loadingOverlay.classList.remove('open');
     showToast('OCR 引擎初始化失败: ' + err.message, 'error');
-    state.processing = false;
-    $('#recognizeBtn').disabled = false;
-    statusBadge.textContent = 'READY';
-    statusBadge.className = 'topbar-badge green';
-    $('#progressBar').classList.remove('visible');
+    resetProcessing();
     return;
   }
   loadingOverlay.classList.remove('open');
 
-  // Reset statuses
   state.files.forEach(f => { f.status = null; f.result = null; });
   renderPreviews();
 
@@ -602,30 +902,25 @@ async function runRecognition() {
   for (const file of filesToProcess) {
     file.status = 'processing';
     renderPreviews();
-    
+
     try {
       const images = await fileToImages(file);
-      let fileResult = { headers: [], rows: [], meta: { source: file.name, pages: images.length } };
-      
+      let fileResult = { headers: [], rows: [], meta: { source: file.name, pages: images.length, engine: 'Tesseract.js' } };
+
       for (let pi = 0; pi < images.length; pi++) {
         $('#progressText').textContent = `${file.name} - 第${pi+1}/${images.length}页`;
-        
         const { data } = await tesseractWorker.recognize(images[pi]);
-        
+
         if (mode === 'text') {
-          // Pure text mode
           if (!fileResult.headers.length) fileResult.headers = ['文本内容'];
           fileResult.rows.push([data.text.trim()]);
         } else {
-          // Table extraction mode
           const table = reconstructTable(data.words, tolerance);
           if (pi === 0) {
             fileResult.headers = table.headers;
             fileResult.rows = table.rows;
           } else {
-            // Merge subsequent pages
             fileResult.rows.push(...table.rows);
-            // Extend headers if more columns
             if (table.headers.length > fileResult.headers.length) {
               for (let i = fileResult.headers.length; i < table.headers.length; i++) {
                 fileResult.headers.push('列' + (i + 1));
@@ -633,11 +928,9 @@ async function runRecognition() {
             }
           }
         }
-        
-        const pct = ((completed + (pi + 1) / images.length) / total * 100);
-        $('#progressFill').style.width = pct + '%';
+        progressFill.style.width = ((completed + (pi + 1) / images.length) / total * 100) + '%';
       }
-      
+
       file.status = 'done';
       file.result = fileResult;
       allResults.push(fileResult);
@@ -647,37 +940,120 @@ async function runRecognition() {
       showToast(`${file.name}: ${err.message}`, 'error');
     }
     completed++;
-    $('#progressFill').style.width = (completed / total * 100) + '%';
+    progressFill.style.width = (completed / total * 100) + '%';
     $('#progressText').textContent = `${completed}/${total} 完成`;
     renderPreviews();
   }
 
-  // Cleanup worker
   try { if (tesseractWorker) await tesseractWorker.terminate(); } catch {}
   tesseractWorker = null;
 
-  // Show results
   if (allResults.length > 0) {
     const merged = mergeResults(allResults);
     setResultData(merged, filesToProcess[0]?.dataUrl);
   }
 
+  resetProcessing();
+  const doneCount = filesToProcess.filter(f => f.status === 'done').length;
+  showToast(`Tesseract 识别完成: ${doneCount}/${total} 成功`, doneCount === total ? 'success' : 'error');
+}
+
+// ── Tencent Cloud Pipeline ──
+async function runTencentCloud(filesToProcess) {
+  state.processing = true;
+  $('#recognizeBtn').disabled = true;
+  statusBadge.textContent = 'PROCESSING';
+  statusBadge.className = 'topbar-badge orange';
+  progressBar.classList.add('visible');
+  progressFill.style.width = '0%';
+  $('#progressText').textContent = '';
+  loadingOverlay.classList.add('open');
+  loadingText.textContent = '调用腾讯云 OCR...';
+  loadingProgress.textContent = '';
+  loadingOverlay.classList.remove('open');
+
+  state.files.forEach(f => { f.status = null; f.result = null; });
+  renderPreviews();
+
+  let completed = 0;
+  const total = filesToProcess.length;
+  let allResults = [];
+
+  for (const file of filesToProcess) {
+    file.status = 'processing';
+    renderPreviews();
+
+    try {
+      const images = await fileToImages(file);
+      let fileResult = { headers: [], rows: [], meta: { source: file.name, pages: images.length, engine: '腾讯云 OCR' } };
+
+      for (let pi = 0; pi < images.length; pi++) {
+        $('#progressText').textContent = `${file.name} - 第${pi+1}/${images.length}页`;
+
+        // Call Tencent Cloud via proxy
+        loadingText.textContent = `识别中: ${file.name} (${pi+1}/${images.length})`;
+        loadingOverlay.classList.add('open');
+
+        const result = await callTencentOCR(images[pi]);
+
+        loadingOverlay.classList.remove('open');
+
+        if (pi === 0) {
+          fileResult.headers = result.headers || [];
+          fileResult.rows = result.rows || [];
+          if (result.meta) Object.assign(fileResult.meta, result.meta);
+        } else {
+          const existingRows = fileResult.rows || [];
+          fileResult.rows = [...existingRows, ...(result.rows || [])];
+          if (result.headers && result.headers.length > (fileResult.headers || []).length) {
+            fileResult.headers = result.headers;
+          }
+        }
+
+        progressFill.style.width = ((completed + (pi + 1) / images.length) / total * 100) + '%';
+      }
+
+      file.status = 'done';
+      file.result = fileResult;
+      allResults.push(fileResult);
+    } catch (err) {
+      loadingOverlay.classList.remove('open');
+      file.status = 'error';
+      file.result = { error: err.message };
+      showToast(`${file.name}: ${err.message}`, 'error');
+    }
+    completed++;
+    progressFill.style.width = (completed / total * 100) + '%';
+    $('#progressText').textContent = `${completed}/${total} 完成`;
+    renderPreviews();
+  }
+
+  if (allResults.length > 0) {
+    const merged = mergeResults(allResults);
+    setResultData(merged, filesToProcess[0]?.dataUrl);
+  }
+
+  resetProcessing();
+  const doneCount = filesToProcess.filter(f => f.status === 'done').length;
+  showToast(`腾讯云 OCR 完成: ${doneCount}/${total} 成功`, doneCount === total ? 'success' : 'error');
+}
+
+function resetProcessing() {
   state.processing = false;
   $('#recognizeBtn').disabled = false;
   statusBadge.textContent = 'READY';
   statusBadge.className = 'topbar-badge green';
-  $('#progressBar').classList.remove('visible');
+  progressBar.classList.remove('visible');
   $('#progressText').textContent = '';
-
-  const doneCount = filesToProcess.filter(f => f.status === 'done').length;
-  showToast(`识别完成: ${doneCount}/${total} 成功`, doneCount === total ? 'success' : 'error');
+  applyEngine(); // re-apply button style
 }
 
+// ── Shared: File to Images ──
 async function fileToImages(file) {
   if (file.isPdf) {
     const pdf = await pdfjsLib.getDocument({ data: file.pdfBuffer }).promise;
     const images = [];
-    const maxPages = Math.min(pdf.numPages, 10); // cap at 10 pages
+    const maxPages = Math.min(pdf.numPages, 10);
     for (let i = 1; i <= maxPages; i++) {
       const page = await pdf.getPage(i);
       const viewport = page.getViewport({ scale: 2 });
@@ -692,122 +1068,22 @@ async function fileToImages(file) {
   return [file.dataUrl];
 }
 
-// ── Table Reconstruction ──
-function reconstructTable(words, tolerance = 12) {
-  if (!words || !words.length) return { headers: [], rows: [] };
-  
-  // Filter out low-confidence noise
-  words = words.filter(w => w.text && w.text.trim() && w.confidence > 30);
-  if (!words.length) return { headers: [], rows: [] };
-  
-  // Sort by Y position
-  words.sort((a, b) => a.bbox.y0 - b.bbox.y0);
-  
-  // Group into rows based on Y overlap
-  const rows = [];
-  let currentRow = [words[0]];
-  let currentY = (words[0].bbox.y0 + words[0].bbox.y1) / 2;
-  
-  for (let i = 1; i < words.length; i++) {
-    const w = words[i];
-    const wY = (w.bbox.y0 + w.bbox.y1) / 2;
-    if (Math.abs(wY - currentY) <= tolerance) {
-      currentRow.push(w);
-      // Update row Y average
-      currentY = currentRow.reduce((s, w) => s + (w.bbox.y0 + w.bbox.y1) / 2, 0) / currentRow.length;
-    } else {
-      rows.push(currentRow);
-      currentRow = [w];
-      currentY = wY;
-    }
-  }
-  if (currentRow.length) rows.push(currentRow);
-  
-  // Sort each row by X position
-  rows.forEach(r => r.sort((a, b) => a.bbox.x0 - b.bbox.x0));
-  
-  // Detect column boundaries by clustering X positions
-  // Collect all word X-centers
-  const allXCenters = words.map(w => (w.bbox.x0 + w.bbox.x1) / 2);
-  allXCenters.sort((a, b) => a - b);
-  
-  // Cluster X positions to find column centers
-  const colThreshold = 25; // pixels
-  const colClusters = [];
-  let currentCluster = [allXCenters[0]];
-  
-  for (let i = 1; i < allXCenters.length; i++) {
-    if (allXCenters[i] - currentCluster[currentCluster.length - 1] <= colThreshold) {
-      currentCluster.push(allXCenters[i]);
-    } else {
-      colClusters.push(currentCluster);
-      currentCluster = [allXCenters[i]];
-    }
-  }
-  if (currentCluster.length) colClusters.push(currentCluster);
-  
-  const colCenters = colClusters.map(c => c.reduce((s, x) => s + x, 0) / c.length);
-  const numCols = colCenters.length;
-  
-  // Build table grid
-  const tableRows = rows.map(rowWords => {
-    const cells = new Array(numCols).fill('');
-    for (const w of rowWords) {
-      const wX = (w.bbox.x0 + w.bbox.x1) / 2;
-      // Find nearest column
-      let minDist = Infinity, nearestCol = 0;
-      for (let c = 0; c < colCenters.length; c++) {
-        const dist = Math.abs(wX - colCenters[c]);
-        if (dist < minDist) { minDist = dist; nearestCol = c; }
-      }
-      cells[nearestCol] = (cells[nearestCol] ? cells[nearestCol] + ' ' : '') + w.text.trim();
-    }
-    return cells;
-  });
-  
-  // First row = headers (if it looks like a header)
-  // Heuristic: if first row has all cells filled and is shorter
-  let headers = [];
-  let dataRows = tableRows;
-  
-  if (tableRows.length > 1) {
-    const firstRow = tableRows[0];
-    const filledCount = firstRow.filter(c => c.trim()).length;
-    if (filledCount >= Math.ceil(numCols * 0.6)) {
-      headers = firstRow.map((c, i) => c.trim() || '列' + (i + 1));
-      dataRows = tableRows.slice(1);
-    }
-  }
-  
-  if (!headers.length) {
-    headers = Array.from({ length: numCols }, (_, i) => '列' + (i + 1));
-  }
-  
-  return { headers, rows: dataRows };
-}
-
+// ── Merge Results ──
 function mergeResults(results) {
   if (results.length === 1) return results[0];
-  // Use the first result's headers, extend if needed
   let headers = [...(results[0].headers || [])];
   const allRows = [];
-  
   for (const r of results) {
     if (!r.rows) continue;
-    // Extend headers if this result has more columns
     if (r.headers && r.headers.length > headers.length) {
-      for (let i = headers.length; i < r.headers.length; i++) {
-        headers.push(r.headers[i] || '列' + (i + 1));
-      }
+      for (let i = headers.length; i < r.headers.length; i++) headers.push(r.headers[i] || '列' + (i + 1));
     }
-    // Pad rows to match header length
     for (const row of r.rows) {
       const padded = [...row];
       while (padded.length < headers.length) padded.push('');
       allRows.push(padded);
     }
   }
-  
   return {
     headers,
     rows: allRows,
@@ -816,6 +1092,7 @@ function mergeResults(results) {
       files: results.length,
       merged: true,
       totalRows: allRows.length,
+      engine: results[0]?.meta?.engine || state.engine,
     },
   };
 }
@@ -920,18 +1197,23 @@ function saveHistory(data) {
     id: Date.now(),
     time: new Date().toLocaleString('zh-CN'),
     name: data.meta?.source || '未命名',
+    engine: data.meta?.engine || state.engine,
     rowCount: data.rows?.length || 0,
     colCount: data.headers?.length || 0,
     data: data,
   };
   state.history.unshift(entry);
   if (state.history.length > 50) state.history.pop();
-  localStorage.setItem('ocr_history_v3', JSON.stringify(state.history));
+  localStorage.setItem('ocr_history_v4', JSON.stringify(state.history));
 }
 
 function loadHistory() {
-  try { state.history = JSON.parse(localStorage.getItem('ocr_history_v3') || '[]'); }
-  catch { state.history = []; }
+  try {
+    // Try v4 first, fall back to v3
+    let raw = localStorage.getItem('ocr_history_v4');
+    if (!raw) raw = localStorage.getItem('ocr_history_v3');
+    state.history = JSON.parse(raw || '[]');
+  } catch { state.history = []; }
 }
 
 function renderHistory() {
@@ -940,15 +1222,19 @@ function renderHistory() {
     zone.innerHTML = `<div class="empty-state"><div class="empty-state-icon">HST</div><div class="empty-state-text">暂无历史记录</div></div>`;
     return;
   }
-  zone.innerHTML = `<div>${state.history.map(h => `
+  zone.innerHTML = `<div>${state.history.map(h => {
+    const engineTag = h.engine === 'tencent' || h.engine === '腾讯云 OCR'
+      ? '<span style="color:var(--purple);font-size:10px">TX</span>'
+      : '<span style="color:var(--green);font-size:10px">TS</span>';
+    return `
     <div class="history-item" data-id="${h.id}">
       <div class="history-item-header">
-        <div class="history-item-name">${h.name}</div>
+        <div class="history-item-name">${engineTag} ${h.name}</div>
         <div class="history-item-time">${h.time}</div>
       </div>
       <div class="history-item-meta">${h.rowCount} 行 x ${h.colCount} 列</div>
-    </div>
-  `).join('')}</div>`;
+    </div>`;
+  }).join('')}</div>`;
 
   zone.querySelectorAll('.history-item').forEach(item => {
     item.addEventListener('click', () => {
@@ -963,12 +1249,8 @@ function renderHistory() {
 }
 
 function renderWork() {
-  // Already rendered, just ensure visibility
   const zone = $('#uploadZone');
-  if (!zone.querySelector('#dropArea')) {
-    // Re-render if coming from history view
-    location.reload();
-  }
+  if (!zone.querySelector('#dropArea')) location.reload();
 }
 
 // ── Sidebar ──
@@ -989,16 +1271,45 @@ $$('.sidebar-btn').forEach(btn => {
 
 function showAbout() {
   showModal(`
-    <h3>OCR Workbench v3.0 — Browser OCR</h3>
-    <p>纯浏览器端 OCR 识别工作台，无需 API 密钥，无需后端服务。</p>
-    <p><strong>引擎：</strong>Tesseract.js v5（浏览器端运行）+ PDF.js</p>
-    <p><strong>工作流程：</strong>上传图片/PDF → 浏览器端 OCR → 自动重建表格 → 导出 Excel</p>
-    <p><strong>支持语言：</strong>中文简/繁、英文、意大利语、荷兰语，可多语言混合识别</p>
-    <p><strong>表格重建：</strong>基于文字坐标自动分行分列，支持调整行容差</p>
-    <p><strong>PDF支持：</strong>自动渲染每页为图片并逐页识别（最多10页）</p>
-    <p><strong>数据存储：</strong>全部在浏览器 localStorage，不上传任何服务器</p>
-    <p><strong>部署：</strong>纯静态 HTML，可直接部署到 Vercel / GitHub Pages / 任意静态托管</p>
-    <p style="margin-top:12px;color:var(--text-dim)">Powered by Tesseract.js · No API keys · No backend</p>
+    <h3>OCR Workbench v4.0 — Dual Engine</h3>
+    <p>双引擎 OCR 识别工作台，一键切换免费浏览器引擎和高精度云端引擎。</p>
+
+    <div class="engine-compare">
+      <div class="engine-card">
+        <h4>Tesseract.js</h4>
+        <ul>
+          <li>完全免费，浏览器端运行</li>
+          <li>无需 API 密钥</li>
+          <li>印刷体表格精度中等</li>
+          <li>支持中/英/意/荷等多语言</li>
+          <li>速度中等（依赖 CPU）</li>
+          <li>数据不上传任何服务器</li>
+        </ul>
+      </div>
+      <div class="engine-card">
+        <h4>腾讯云 OCR</h4>
+        <ul>
+          <li>每月 1000 次免费额度</li>
+          <li>需要 SecretId + SecretKey</li>
+          <li>表格识别精度高</li>
+          <li>支持有线/无线/嵌套表格</li>
+          <li>速度快（云端 GPU）</li>
+          <li>密钥仅存本地，通过代理调用</li>
+        </ul>
+      </div>
+    </div>
+
+    <h4>使用方法</h4>
+    <p>1. 在顶部选择引擎（Tesseract.js 或 腾讯云 OCR）</p>
+    <p>2. 如选腾讯云，展开密钥栏填入 SecretId + SecretKey，点击保存</p>
+    <p>3. 上传图片/PDF → 点选文件 → 开始识别 → 查看表格 → 导出 Excel</p>
+
+    <h4>密钥安全</h4>
+    <p>密钥仅存储在浏览器 localStorage，每次识别通过 <code>/api/ocr</code> 代理转发至腾讯云，不会明文暴露在网络请求中。也可在 Vercel 环境变量中配置 <code>TENCENTCLOUD_SECRET_ID</code> / <code>TENCENTCLOUD_SECRET_KEY</code>，则页面无需输入密钥。</p>
+
+    <h4>部署</h4>
+    <p><code>vercel deploy --prod</code> — 前端静态页 + Serverless 代理一体化部署</p>
+    <p style="margin-top:12px;color:var(--text-dim)">Powered by Tesseract.js + 腾讯云 OCR · v4.0</p>
   `);
 }
 
